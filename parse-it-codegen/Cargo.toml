@@ -1,0 +1,10 @@
+[package]
+name = "parse-it-codegen"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+hashlink = "0.9.1"
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }

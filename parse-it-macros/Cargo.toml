@@ -1,0 +1,14 @@
+[package]
+name = "parse-it-macros"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+parse-it-codegen = { path = "../parse-it-codegen" }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+
+
+[lib]
+proc-macro = true

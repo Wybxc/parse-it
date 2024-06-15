@@ -1,0 +1,8 @@
+[package]
+name = "parse-it"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+chumsky = "0.9.3"
+parse-it-macros = { path = "../parse-it-macros" }
