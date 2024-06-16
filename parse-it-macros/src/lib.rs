@@ -1,5 +1,4 @@
 use parse_it_codegen::syntax::{Atom, Capture, ParseIt, Parser, Part, Production, Rule};
-use quote::quote;
 use syn::{
     parse::{discouraged::Speculative, Parse, ParseStream},
     Result, Token,
@@ -139,15 +138,9 @@ fn parse_atom(input: ParseStream) -> Result<Atom> {
 #[proc_macro]
 pub fn parse_it(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(input with parse);
-    let input = match input.compile() {
-        Ok(input) => input,
+    let middle = match input.compile() {
+        Ok(middle) => middle,
         Err(msg) => return msg.into(),
     };
-
-    println!("{}", input.debug());
-
-    // proc_macro::TokenStream::new()
-    quote! {
-        ();
-    }.into()
+    middle.expand().into()
 }

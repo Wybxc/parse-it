@@ -1,7 +1,7 @@
+#![allow(clippy::just_underscores_and_digits, clippy::redundant_pattern)]
 use chumsky::Parser as _;
 use parse_it::Parser;
 
-#[allow(unused)]
 fn parser0<'src>() -> Parser<'src, i32> {
     parse_it::parse_it! {
         Digit -> char {
@@ -9,7 +9,7 @@ fn parser0<'src>() -> Parser<'src, i32> {
         }
 
         Num -> i32 {
-            digits:(Digit+) => digits.parse::<i32>().unwrap(),
+            digits:(Digit+) => digits.into_iter().collect::<String>().parse::<i32>().unwrap(),
         }
 
         Expr -> i32 {
@@ -35,7 +35,6 @@ fn parser0<'src>() -> Parser<'src, i32> {
 
         return Expr;
     }
-    todo!()
 }
 
 fn parser<'src>() -> Parser<'src, i32> {
@@ -97,7 +96,13 @@ fn parser<'src>() -> Parser<'src, i32> {
 
 fn main() {
     let input = "11 + 2 * (3 + 4) / 5";
+
     let parser = parser();
+    let result = parser.parse(input).unwrap();
+    println!("{}", result);
+    assert_eq!(result, 13);
+
+    let parser = parser0();
     let result = parser.parse(input).unwrap();
     println!("{}", result);
     assert_eq!(result, 13);

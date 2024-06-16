@@ -1,15 +1,17 @@
 use std::collections::HashMap;
 
 use proc_macro2::TokenStream;
-use quote::quote_spanned;
+use quote::{format_ident, quote_spanned};
+use syn::visit_mut::VisitMut;
 
 use crate::{
-    backend::{Capture, Middle, Value, ValueData},
+    middle::{Capture, Middle, Value, ValueData},
     syntax::{Atom, ParseIt, Parser, Part, Production, Rule},
+    Hasher,
 };
 
 struct Context {
-    pub symbols: HashMap<String, Symbol>,
+    pub symbols: HashMap<String, Symbol, Hasher>,
 }
 
 enum Symbol {
@@ -32,7 +34,34 @@ impl Symbol {
 impl Context {
     fn new() -> Self {
         Self {
-            symbols: HashMap::new(),
+            symbols: HashMap::default(),
+        }
+    }
+}
+
+struct ExprVisitor {
+    /// replace `self` with this ident
+    pub self_ident: syn::Ident,
+    /// whether `self` is referred
+    pub referred_self: bool,
+}
+
+impl ExprVisitor {
+    pub fn new() -> Self {
+        Self {
+            self_ident: format_ident!("r#__self"),
+            referred_self: false,
+        }
+    }
+}
+
+impl VisitMut for ExprVisitor {
+    fn visit_ident_mut(&mut self, i: &mut proc_macro2::Ident) {
+        if i == "self" {
+            let span = i.span();
+            *i = self.self_ident.clone();
+            i.set_span(span);
+            self.referred_self = true;
         }
     }
 }
@@ -70,13 +99,22 @@ impl ParseIt {
 
 impl Parser {
     fn compile(self, lang: &mut Middle, ctx: &mut Context) -> Result<(), TokenStream> {
+        if self.rules.is_empty() {
+            return Err(quote_spanned! {
+                self.name.span() => compile_error!("empty parser")
+            });
+        }
         let rules = self
             .rules
             .into_iter()
-            .map(|rule| rule.compile(lang, ctx))
+            .map(|rule| rule.compile(lang, ctx, self.ty.clone()))
             .collect::<Result<Vec<_>, _>>()?;
-        let rules = ValueData::choice_nocap(rules);
-        let value = lang.push_back(rules);
+        let value = if rules.len() == 1 {
+            rules.into_iter().next().unwrap()
+        } else {
+            let rules = ValueData::choice_nocap(rules);
+            lang.push_back(rules)
+        };
 
         let name = self.name.to_string();
         if let Some(symbol) = ctx.symbols.get_mut(&name) {
@@ -96,9 +134,30 @@ impl Parser {
 }
 
 impl Rule {
-    fn compile(self, lang: &mut Middle, ctx: &mut Context) -> Result<Value, TokenStream> {
-        let (value, _) = self.production.compile(lang, ctx)?;
-        let value = ValueData::map(value, self.action);
+    fn compile(
+        mut self,
+        lang: &mut Middle,
+        ctx: &mut Context,
+        ty: syn::Type,
+    ) -> Result<Value, TokenStream> {
+        let (value, mut capture) = self.production.compile(lang, ctx)?;
+
+        let mut visitor = ExprVisitor::new();
+        visitor.visit_expr_mut(&mut self.action);
+        if visitor.referred_self {
+            capture = Capture::Named(
+                Box::new(syn::Pat::Ident(syn::PatIdent {
+                    attrs: Vec::new(),
+                    by_ref: None,
+                    mutability: None,
+                    ident: visitor.self_ident,
+                    subpat: None,
+                })),
+                Box::new(capture),
+            );
+        }
+
+        let value = ValueData::map(value, capture, ty, self.action);
         let value = lang.push_back(value);
         Ok(value)
     }
