@@ -1,5 +1,5 @@
 #![allow(clippy::just_underscores_and_digits, clippy::redundant_pattern)]
-use chumsky::Parser as _;
+use chumsky::{primitive::end, Parser as _};
 use parse_it::Parser;
 
 fn parser0<'src>() -> Parser<'src, i32> {
@@ -9,7 +9,7 @@ fn parser0<'src>() -> Parser<'src, i32> {
         }
 
         Num -> i32 {
-            digits:(Digit+) => digits.into_iter().collect::<String>().parse::<i32>().unwrap(),
+            digits:Digit+ => digits.into_iter().collect::<String>().parse::<i32>().unwrap(),
         }
 
         Expr -> i32 {
@@ -17,14 +17,22 @@ fn parser0<'src>() -> Parser<'src, i32> {
         }
 
         AddExpr -> i32 {
-            lhs:MulExpr '+' rhs:AddExpr => lhs + rhs,
-            lhs:MulExpr '-' rhs:AddExpr => lhs - rhs,
+            lhs:MulExpr '+' rhs:AddExpr => {
+                lhs + rhs
+            },
+            lhs:MulExpr '-' rhs:AddExpr => {
+                lhs - rhs
+            },
             MulExpr => self,
         }
 
         MulExpr -> i32 {
-            lhs:Term '*' rhs:MulExpr => lhs * rhs,
-            lhs:Term '/' rhs:MulExpr => lhs / rhs,
+            lhs:Term '*' rhs:MulExpr => {
+                lhs * rhs
+            },
+            lhs:Term '/' rhs:MulExpr => {
+                lhs / rhs
+            },
             Term => self,
         }
 
@@ -95,15 +103,15 @@ fn parser<'src>() -> Parser<'src, i32> {
 }
 
 fn main() {
-    let input = "11 + 2 * (3 + 4) / 5";
+    let input = "11+2*(3+4)/5";
 
-    let parser = parser();
+    let parser = parser().then_ignore(end());
     let result = parser.parse(input).unwrap();
-    println!("{}", result);
+    println!("parser: {}", result);
     assert_eq!(result, 13);
 
-    let parser = parser0();
+    let parser = parser0().then_ignore(end());
     let result = parser.parse(input).unwrap();
-    println!("{}", result);
+    println!("parser0: {}", result);
     assert_eq!(result, 13);
 }
