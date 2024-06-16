@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use hashlink::LinkedHashMap;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned, ToTokens};
@@ -58,11 +60,10 @@ pub struct ValueData {
 }
 
 impl ValueData {
-    pub fn declare() -> (Self, Capture) {
-        let declare = Self {
+    pub fn declare() -> Self {
+        Self {
             kind: ValueKind::Declare,
-        };
-        (declare, Capture::Loud)
+        }
     }
 
     pub fn define(decl: Value, val: Value) -> Self {
@@ -103,15 +104,16 @@ impl ValueData {
     }
 
     /// # Panics
-    /// Panics if the iterator is empty.
+    /// Panics if the input vector is empty.
     pub fn choice(
-        mut vs: impl Iterator<Item = (Value, Capture)>,
+        mut vs: impl Iterator<Item = Result<(Value, Capture), TokenStream>>,
     ) -> Result<(Self, Capture), TokenStream> {
-        let (v, cap) = vs.next().unwrap();
+        let (v, cap) = vs.next().unwrap()?;
         let mut acc = vec![v];
         let mut u = cap;
 
-        for (v, c) in vs {
+        for v in vs {
+            let (v, c) = v?;
             u = c.unify(u)?;
             acc.push(v);
         }
@@ -195,7 +197,7 @@ enum ValueKind {
 pub struct Middle {
     next_value: i32,
     values: LinkedHashMap<Value, ValueData>,
-    results: Vec<Value>,
+    pub results: Vec<Value>,
 }
 
 impl Middle {
@@ -211,7 +213,11 @@ impl Middle {
         value
     }
 
-    pub fn debug(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn debug(self) -> MiddleDebug {
+        MiddleDebug(self)
+    }
+
+    pub fn debug_with(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (value, data) in self.values.iter() {
             match &data.kind {
                 ValueKind::Declare => writeln!(fmt, "#{} = Declare", value.0)?,
@@ -254,5 +260,13 @@ impl Middle {
             writeln!(fmt, ")")?
         }
         Ok(())
+    }
+}
+
+pub struct MiddleDebug(pub Middle);
+
+impl Display for MiddleDebug {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.debug_with(f)
     }
 }

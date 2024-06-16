@@ -33,7 +33,8 @@ pub struct Rule {
 /// ```
 #[derive(Debug)]
 pub struct Production {
-    pub parts: Vec<Part>,
+    /// non-empty: (first, rest)
+    pub parts: (Part, Vec<Part>),
 }
 
 #[derive(Debug)]
@@ -44,9 +45,9 @@ pub struct Part {
 
 #[derive(Debug)]
 pub enum Capture {
-    Named(syn::Pat),
+    Named(Box<syn::Pat>),
     Loud,
-    Slient,
+    NotSpecified,
 }
 
 #[derive(Debug)]

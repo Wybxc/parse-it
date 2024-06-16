@@ -1,35 +1,31 @@
 use std::collections::HashMap;
 
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned};
+use quote::quote_spanned;
 
 use crate::{
     backend::{Capture, Middle, Value, ValueData},
-    syntax::{ParseIt, Parser, Production, Rule},
+    syntax::{Atom, ParseIt, Parser, Part, Production, Rule},
 };
 
 struct Context {
     pub symbols: HashMap<String, Symbol>,
 }
 
-struct Symbol {
-    pub value: Value,
-    pub initialized: bool,
+enum Symbol {
+    Decl(Value, syn::Ident),
+    Defined(Value),
 }
 
 impl Symbol {
-    fn new_decl(value: Value) -> Self {
-        Self {
-            value,
-            initialized: false,
+    fn value(&self) -> Value {
+        match self {
+            Symbol::Decl(value, _) | Symbol::Defined(value) => *value,
         }
     }
 
-    fn new_defined(value: Value) -> Self {
-        Self {
-            value,
-            initialized: true,
-        }
+    fn initialized(&self) -> bool {
+        matches!(self, Symbol::Defined(_))
     }
 }
 
@@ -50,6 +46,24 @@ impl ParseIt {
             parser.compile(&mut lang, &mut ctx)?;
         }
 
+        for symbol in ctx.symbols.values() {
+            if let Symbol::Decl(_, id) = symbol {
+                return Err(quote_spanned! {
+                    id.span() => compile_error!("undefined parser")
+                });
+            }
+        }
+
+        for name in self.results {
+            if let Some(sym) = ctx.symbols.get(&name.to_string()) {
+                lang.results.push(sym.value());
+            } else {
+                return Err(quote_spanned! {
+                    name.span() => compile_error!("undefined parser")
+                });
+            }
+        }
+
         Ok(lang)
     }
 }
@@ -66,15 +80,15 @@ impl Parser {
 
         let name = self.name.to_string();
         if let Some(symbol) = ctx.symbols.get_mut(&name) {
-            if symbol.initialized {
+            if symbol.initialized() {
                 return Err(quote_spanned! {
                     self.name.span() => compile_error!("redefinition of parser")
                 });
             }
-            lang.push_back(ValueData::define(symbol.value, value));
-            symbol.initialized = true;
+            lang.push_back(ValueData::define(symbol.value(), value));
+            *symbol = Symbol::Defined(value);
         } else {
-            ctx.symbols.insert(name, Symbol::new_defined(value));
+            ctx.symbols.insert(name, Symbol::Defined(value));
         }
 
         Ok(())
@@ -96,6 +110,89 @@ impl Production {
         lang: &mut Middle,
         ctx: &mut Context,
     ) -> Result<(Value, Capture), TokenStream> {
-        todo!()
+        let mut result = self.parts.0.compile(lang, ctx)?;
+        for part in self.parts.1 {
+            let (value, cap) = ValueData::then(result, part.compile(lang, ctx)?);
+            let value = lang.push_back(value);
+            result = (value, cap);
+        }
+        Ok(result)
+    }
+}
+
+impl Part {
+    fn compile(
+        self,
+        lang: &mut Middle,
+        ctx: &mut Context,
+    ) -> Result<(Value, Capture), TokenStream> {
+        let (value, capture) = self.part.compile(lang, ctx)?;
+        let capture = match self.capture {
+            crate::syntax::Capture::Named(name) => Capture::Named(name, Box::new(capture)),
+            crate::syntax::Capture::Loud => {
+                if capture.is_loud() {
+                    capture
+                } else {
+                    Capture::Loud
+                }
+            }
+            crate::syntax::Capture::NotSpecified => capture,
+        };
+        Ok((value, capture))
+    }
+}
+
+impl Atom {
+    fn compile(
+        self,
+        lang: &mut Middle,
+        ctx: &mut Context,
+    ) -> Result<(Value, Capture), TokenStream> {
+        match self {
+            Atom::Terminal(lit) => {
+                let (value, capture) = match lit {
+                    syn::Lit::Char(c) => ValueData::just(c.value()),
+                    _ => {
+                        Err(quote_spanned! { lit.span() => compile_error!("unsupported literal") })?
+                    }
+                };
+                let value = lang.push_back(value);
+                Ok((value, capture))
+            }
+            Atom::NonTerminal(id) => {
+                let name = id.to_string();
+                let value = ctx
+                    .symbols
+                    .entry(name)
+                    .or_insert_with(|| {
+                        let value = lang.push_back(ValueData::declare());
+                        Symbol::Decl(value, id)
+                    })
+                    .value();
+                Ok((value, Capture::Loud))
+            }
+            Atom::Sub(p) => p.compile(lang, ctx),
+            Atom::Choice(choices) => {
+                let (choices, capture) =
+                    ValueData::choice(choices.into_iter().map(|p| p.compile(lang, ctx)))?;
+                let value = lang.push_back(choices);
+                Ok((value, capture))
+            }
+            Atom::Repeat(p) => {
+                let (value, capture) = ValueData::repeat(p.compile(lang, ctx)?);
+                let value = lang.push_back(value);
+                Ok((value, capture))
+            }
+            Atom::Repeat1(p) => {
+                let (value, capture) = ValueData::repeat1(p.compile(lang, ctx)?);
+                let value = lang.push_back(value);
+                Ok((value, capture))
+            }
+            Atom::Optional(p) => {
+                let (value, capture) = ValueData::or_not(p.compile(lang, ctx)?);
+                let value = lang.push_back(value);
+                Ok((value, capture))
+            }
+        }
     }
 }
