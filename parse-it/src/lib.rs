@@ -1,3 +1,5 @@
+#![doc=include_str!("../../README.md")]
+
 use chumsky::{error::Simple, Parser as _};
 pub use parse_it_macros::parse_it;
 

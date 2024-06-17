@@ -1,7 +1,11 @@
 # Summary
 
-- [Chapter 1](./chapter_1.md)
+- [Introduction](./intros.md)
+
+# User Guide
+
+- [Getting Started](./getting-started.md)
 
 # Blog
 
-- [Parser as a DSL](./blog/parser-as-a-dsl.md)
+- [Parser as a DSL: The Story of "Parse It"](./blog/parser-as-a-dsl.md)
