@@ -22,48 +22,22 @@ pub struct Choice<P> {
     pub parsers: P,
 }
 
-macro_rules! impl_choice {
-    ($(($parser:ident, $idx:tt)),*) => {
-        impl<K, T, $($parser),*> Parser<K> for Choice<($($parser,)*)>
-        where
-            K: Copy,
-            $($parser: Parser<K, Output = T>,)*
-        {
-            type Output = T;
+#[typle::typle(Tuple for 2..=32)]
+impl<K, T, P: Tuple> Parser<K> for Choice<P>
+where
+    K: Copy,
+    P<_>: Parser<K, Output = T>,
+{
+    type Output = T;
 
-            fn parse(&self, state: &ParserState<K>) -> Result<T, Error> {
-                $(
-                    let fork = state.fork();
-                    match self.parsers.$idx.parse(&fork) {
-                        Ok(value) => {
-                            state.advance_to(&fork);
-                            return Ok(value);
-                        }
-                        Err(_) => {}
-                    }
-                )*
-                Err(Error::new(state.span()))
+    fn parse(&self, state: &ParserState<K>) -> Result<T, Error> {
+        for typle_index!(i) in 0..P::LEN {
+            let fork = state.fork();
+            if let Ok(value) = self.parsers[[i]].parse(&fork) {
+                state.advance_to(&fork);
+                return Ok(value);
             }
         }
-    };
-}
-
-#[rustfmt::skip]
-mod choice {
-    use super::*;
-    impl_choice!((P0, 0), (P1, 1));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7), (P8, 8));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7), (P8, 8), (P9, 9));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7), (P8, 8), (P9, 9), (P10, 10));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7), (P8, 8), (P9, 9), (P10, 10), (P11, 11));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7), (P8, 8), (P9, 9), (P10, 10), (P11, 11), (P12, 12));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7), (P8, 8), (P9, 9), (P10, 10), (P11, 11), (P12, 12), (P13, 13));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7), (P8, 8), (P9, 9), (P10, 10), (P11, 11), (P12, 12), (P13, 13), (P14, 14));
-    impl_choice!((P0, 0), (P1, 1), (P2, 2), (P3, 3), (P4, 4), (P5, 5), (P6, 6), (P7, 7), (P8, 8), (P9, 9), (P10, 10), (P11, 11), (P12, 12), (P13, 13), (P14, 14), (P15, 15));
+        Err(Error::new(state.span()))
+    }
 }

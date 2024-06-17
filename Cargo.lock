@@ -67,6 +67,7 @@ name = "parse-it"
 version = "0.0.0"
 dependencies = [
  "parse-it-macros",
+ "typle",
 ]
 
 [[package]]
@@ -120,6 +121,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "typle"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd022139793be6f9656ec46271b7dbad78d335592deb3a9943d2eb704e0293e0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "zip_clone",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -156,3 +169,9 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "zip_clone"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a370fc1fa7531b16def7a211177ae2c3dd56246e6f6109d7855d85338bafe834"

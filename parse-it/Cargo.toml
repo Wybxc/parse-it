@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 parse-it-macros = { path = "../parse-it-macros" }
+typle = "0.10.3"
