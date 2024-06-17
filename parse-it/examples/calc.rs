@@ -17,20 +17,20 @@ fn parser0<'src>() -> Parser<'src, i32> {
         AddExpr -> i32 {
             lhs:MulExpr '+' rhs:AddExpr => {
                 lhs + rhs
-            },
+            }
             lhs:MulExpr '-' rhs:AddExpr => {
                 lhs - rhs
-            },
+            }
             MulExpr => self,
         }
 
         MulExpr -> i32 {
             lhs:Term '*' rhs:MulExpr => {
                 lhs * rhs
-            },
+            }
             lhs:Term '/' rhs:MulExpr => {
                 lhs / rhs
-            },
+            }
             Term => self,
         }
 

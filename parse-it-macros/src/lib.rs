@@ -32,13 +32,19 @@ fn parse_parser(input: ParseStream) -> Result<Parser> {
 
     let content;
     syn::braced!(content in input);
-    let rules = content.parse_terminated(parse_rule, Token![,])?;
+    // let rules = content.parse_terminated(parse_rule, Token![,])?;
+    let mut rules = vec![];
+    while !content.is_empty() {
+        let rule = content.call(parse_rule)?;
+        if (requires_comma_to_be_match_arm(&rule.action) && !content.is_empty())
+            || content.peek(Token![,])
+        {
+            content.parse::<Token![,]>()?;
+        }
+        rules.push(rule);
+    }
 
-    Ok(Parser {
-        name,
-        ty,
-        rules: rules.into_iter().collect(),
-    })
+    Ok(Parser { name, ty, rules })
 }
 
 fn parse_rule(input: ParseStream) -> Result<Rule> {
@@ -143,4 +149,20 @@ pub fn parse_it(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         Err(msg) => return msg.into(),
     };
     middle.expand().into()
+}
+
+fn requires_comma_to_be_match_arm(expr: &syn::Expr) -> bool {
+    use syn::Expr;
+    !matches!(
+        expr,
+        Expr::If(_)
+            | Expr::Match(_)
+            | Expr::Block(_)
+            | Expr::Unsafe(_)
+            | Expr::While(_)
+            | Expr::Loop(_)
+            | Expr::ForLoop(_)
+            | Expr::TryBlock(_)
+            | Expr::Const(_)
+    )
 }
