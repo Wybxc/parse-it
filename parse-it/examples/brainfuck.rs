@@ -30,10 +30,9 @@ fn main() {
         return Brainfuck;
     };
 
-    let src = std::fs::read_to_string(std::env::args().nth(1).expect("Expected file argument"))
-        .expect("Failed to read file");
+    let src = "--[>--->->->++>-<<<<<-------]>--.>---------.>--..+++.>----.>+++++++++.<<.+++.------.<-.>>+.";
 
-    match parser.parse(src.trim()) {
+    match parser.parse(src) {
         Ok(ast) => execute(&ast, &mut 0, &mut [0; TAPE_LEN]),
         Err(errs) => errs.into_iter().for_each(|e| println!("{:?}", e)),
     };
