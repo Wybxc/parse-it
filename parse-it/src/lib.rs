@@ -1,10 +1,23 @@
-use chumsky::error::Simple;
+use chumsky::{error::Simple, Parser as _};
 pub use parse_it_macros::parse_it;
 
-pub type Parser<'src, T> = chumsky::BoxedParser<'src, char, T, Simple<char>>;
+pub struct Parser<'src, T> {
+    parser: chumsky::BoxedParser<'src, char, T, Simple<char>>,
+}
 
-pub trait Grammar {
-    type Parser;
+impl<'src, T> Parser<'src, T> {
+    pub fn parse(&self, src: &'src str) -> Result<T, Vec<Simple<char>>> {
+        self.parser
+            .clone()
+            .then_ignore(chumsky::primitive::end())
+            .parse(src)
+    }
+}
+
+impl<'src, T> From<chumsky::BoxedParser<'src, char, T, Simple<char>>> for Parser<'src, T> {
+    fn from(parser: chumsky::BoxedParser<'src, char, T, Simple<char>>) -> Self {
+        Self { parser }
+    }
 }
 
 #[doc(hidden)]
@@ -106,6 +119,6 @@ pub mod __internal {
     pub fn into_parser<'src, T>(
         parser: impl Parser<char, T, Error = Simple<char>> + 'src,
     ) -> super::Parser<'src, T> {
-        parser.boxed()
+        parser.boxed().into()
     }
 }

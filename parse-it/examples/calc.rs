@@ -1,5 +1,3 @@
-#![allow(clippy::just_underscores_and_digits, clippy::redundant_pattern)]
-use chumsky::{primitive::end, Parser as _};
 use parse_it::Parser;
 
 fn parser0<'src>() -> Parser<'src, i32> {
@@ -99,18 +97,18 @@ fn parser<'src>() -> Parser<'src, i32> {
         term.clone(),
     )));
 
-    expr.boxed()
+    expr.boxed().into()
 }
 
 fn main() {
     let input = "11+2*(3+4)/5";
 
-    let parser = parser().then_ignore(end());
+    let parser = parser();
     let result = parser.parse(input).unwrap();
     println!("parser: {}", result);
     assert_eq!(result, 13);
 
-    let parser = parser0().then_ignore(end());
+    let parser = parser0();
     let result = parser.parse(input).unwrap();
     println!("parser0: {}", result);
     assert_eq!(result, 13);
