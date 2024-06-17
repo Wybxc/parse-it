@@ -1,0 +1,117 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'parse_it'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=parse-it"
+                ],
+                "filter": {
+                    "name": "parse_it",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'brainfuck'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=brainfuck",
+                    "--package=parse-it"
+                ],
+                "filter": {
+                    "name": "brainfuck",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'brainfuck'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=brainfuck",
+                    "--package=parse-it"
+                ],
+                "filter": {
+                    "name": "brainfuck",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'calc'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=calc",
+                    "--package=parse-it"
+                ],
+                "filter": {
+                    "name": "calc",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'calc'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=calc",
+                    "--package=parse-it"
+                ],
+                "filter": {
+                    "name": "calc",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'parse_it_codegen'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=parse-it-codegen"
+                ],
+                "filter": {
+                    "name": "parse_it_codegen",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

@@ -12,9 +12,19 @@ pub trait Parser<K> {
     fn parse(&self, state: &ParserState<K>) -> Result<Self::Output, Error>;
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub struct Error {
     pub span: (usize, usize),
+    pub backtrace: std::backtrace::Backtrace,
+}
+
+impl Error {
+    pub fn new(span: (usize, usize)) -> Self {
+        Self {
+            span,
+            backtrace: std::backtrace::Backtrace::capture(),
+        }
+    }
 }
 
 pub struct ParserState<K> {

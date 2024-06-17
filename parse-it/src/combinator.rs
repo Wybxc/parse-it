@@ -99,7 +99,7 @@ where
             count += 1;
         }
         if count < self.at_least {
-            return Err(Error { span: state.span() });
+            return Err(Error::new(state.span()));
         }
         state.advance_to(&fork);
         Ok(values)

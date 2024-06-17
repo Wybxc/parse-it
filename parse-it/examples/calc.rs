@@ -1,7 +1,5 @@
-use parse_it::Parser;
-
-fn parser() -> Parser<i32> {
-    parse_it::parse_it! {
+fn main() {
+    let parser = parse_it::parse_it! {
         Digit -> char {
             @['0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'] => self
         }
@@ -40,14 +38,19 @@ fn parser() -> Parser<i32> {
         }
 
         return Expr;
-    }
-}
+    };
 
-fn main() {
     let input = "11+2*(3+4)/5";
 
-    let parser = parser();
-    let result = parser.parse(input).unwrap();
+    let result = match parser.parse(input) {
+        Ok(value) => value,
+        Err(err) => {
+            println!("span: {}..{}", err.span.0, err.span.1);
+            println!("{}", err.backtrace);
+            return;
+        }
+    };
+
     println!("parser: {}", result);
     assert_eq!(result, 13);
 }

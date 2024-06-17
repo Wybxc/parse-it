@@ -12,7 +12,7 @@ impl<K: Copy + Eq> Parser<K> for Just<K> {
         if state.peek(|token| token.kind == self.value) {
             Ok(state.next().unwrap().kind)
         } else {
-            Err(Error { span: state.span() })
+            Err(Error::new(state.span()))
         }
     }
 }
@@ -32,8 +32,8 @@ macro_rules! impl_choice {
             type Output = T;
 
             fn parse(&self, state: &ParserState<K>) -> Result<T, Error> {
-                let fork = state.fork();
                 $(
+                    let fork = state.fork();
                     match self.parsers.$idx.parse(&fork) {
                         Ok(value) => {
                             state.advance_to(&fork);
@@ -42,7 +42,7 @@ macro_rules! impl_choice {
                         Err(_) => {}
                     }
                 )*
-                Err(Error { span: state.span() })
+                Err(Error::new(state.span()))
             }
         }
     };
