@@ -123,7 +123,7 @@ impl Parser {
                     self.name.span() => compile_error!("redefinition of parser")
                 });
             }
-            lang.push_back(ValueData::define(symbol.value(), value));
+            let value = lang.push_back(ValueData::define(symbol.value(), value));
             *symbol = Symbol::Defined(value);
         } else {
             ctx.symbols.insert(name, Symbol::Defined(value));

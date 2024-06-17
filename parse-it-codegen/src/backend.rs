@@ -41,7 +41,10 @@ impl Capture {
 
 impl Middle {
     pub fn expand(self) -> TokenStream {
-        let mut result = TokenStream::new();
+        let arena = format_ident!("r#__arena");
+        let mut result = quote! {
+            let #arena = ::parse_it::__internal::new_arena();
+        };
         let last_use = self.analyze_last_use();
 
         for (val, data) in self.values() {
@@ -58,13 +61,13 @@ impl Middle {
             let val = val.to_ident();
             match data.kind() {
                 crate::middle::ValueKind::Declare => result.extend(quote! {
-                    let mut #val = ::parse_it::__internal::declare_recursive();
+                    let #val = ::parse_it::__internal::declare_recursive(#arena.clone());
                 }),
                 crate::middle::ValueKind::Define { decl, value } => {
                     let decl = use_ident(*decl);
                     let value = use_ident(*value);
                     result.extend(quote! {
-                        ::parse_it::__internal::define_recursive(&mut #decl, #value);
+                        let #val = ::parse_it::__internal::define_recursive(#decl, #value);
                     })
                 }
                 crate::middle::ValueKind::Just(c) => result.extend(quote! {
@@ -127,7 +130,7 @@ impl Middle {
 
         let results = self.results.into_iter().map(|v| {
             let v = v.to_ident();
-            quote! { ::parse_it::__internal::into_parser(#v) }
+            quote! { ::parse_it::__internal::into_parser(#v, #arena.clone()) }
         });
         result.extend(quote! {
             (#(#results),*)
