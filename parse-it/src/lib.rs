@@ -2,6 +2,7 @@
 
 mod arena;
 pub mod combinator;
+
 pub mod parser;
 pub mod primitive;
 pub mod recursive;
@@ -32,7 +33,11 @@ impl<T> Parser<T> {
 #[doc(hidden)]
 pub mod __internal {
 
-    use crate::{arena::Arena, combinator::*, parser::Parser, primitive::*, recursive::*};
+    use crate::arena::Arena;
+    use crate::combinator::*;
+    use crate::parser::Parser;
+    use crate::primitive::*;
+    use crate::recursive::*;
 
     #[inline(always)]
     pub fn new_arena<const N: usize>() -> Arena<N> {

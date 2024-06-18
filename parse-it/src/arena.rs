@@ -1,9 +1,7 @@
-use std::{
-    any::Any,
-    cell::{Cell, OnceCell},
-    ops::Index,
-    rc::{Rc, Weak},
-};
+use std::any::Any;
+use std::cell::{Cell, OnceCell};
+use std::ops::Index;
+use std::rc::{Rc, Weak};
 
 pub struct Arena<const N: usize> {
     inner: Rc<ArenaInner<N>>,

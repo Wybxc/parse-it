@@ -4,10 +4,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 
-use crate::{
-    middle::{Capture, Middle, Value},
-    Hasher,
-};
+use crate::middle::{Capture, Middle, Value};
+use crate::Hasher;
 
 impl Value {
     pub fn to_ident(self) -> syn::Ident {

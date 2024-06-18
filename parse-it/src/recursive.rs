@@ -1,7 +1,5 @@
-use crate::{
-    arena::{Arena, Slot},
-    parser::{Error, Parser, ParserState},
-};
+use crate::arena::{Arena, Slot};
+use crate::parser::{Error, Parser, ParserState};
 
 #[derive(Clone)]
 pub struct Recursive<const N: usize, K, T> {

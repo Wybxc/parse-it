@@ -1,6 +1,8 @@
-use std::{fmt::Display, ops::Index};
+use std::fmt::Display;
+use std::ops::Index;
 
-use hashlink::{linked_hash_map::CursorMut, LinkedHashMap};
+use hashlink::linked_hash_map::CursorMut;
+use hashlink::LinkedHashMap;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned, ToTokens};
 use syn::spanned::Spanned;

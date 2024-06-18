@@ -1,4 +1,5 @@
-use std::{cell::Cell, rc::Rc};
+use std::cell::Cell;
+use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 pub struct Token<K> {
@@ -66,11 +67,20 @@ impl<K: Copy> ParserState<K> {
         self.pos.get() >= self.items.len()
     }
 
+    /// Advance the state to the given state.
+    ///
+    /// # Panics
+    /// Panics if the given state is before the current state.
     pub fn advance_to(&self, other: &Self) {
-        self.pos.set(other.pos.get());
+        self.advance_to_pos(other.pos.get())
     }
 
+    /// Advance the state to the given position.
+    ///
+    /// # Panics
+    /// Panics if the given position is before the current position.
     pub fn advance_to_pos(&self, pos: usize) {
+        assert!(pos >= self.pos.get() && pos <= self.items.len());
         self.pos.set(pos)
     }
 

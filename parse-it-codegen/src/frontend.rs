@@ -4,11 +4,9 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote_spanned};
 use syn::visit_mut::VisitMut;
 
-use crate::{
-    middle::{Capture, Middle, Value, ValueData},
-    syntax::{Atom, ParseIt, Parser, Part, Production, Rule},
-    Hasher,
-};
+use crate::middle::{Capture, Middle, Value, ValueData};
+use crate::syntax::{Atom, ParseIt, Parser, Part, Production, Rule};
+use crate::Hasher;
 
 #[derive(Default)]
 struct Context {

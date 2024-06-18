@@ -1,8 +1,7 @@
 use parse_it_codegen::syntax::{Atom, Capture, ParseIt, Parser, Part, Production, Rule};
-use syn::{
-    parse::{discouraged::Speculative, Parse, ParseStream},
-    Result, Token,
-};
+use syn::parse::discouraged::Speculative;
+use syn::parse::{Parse, ParseStream};
+use syn::{Result, Token};
 
 fn parse(input: ParseStream) -> Result<ParseIt> {
     let mut parsers = vec![];
