@@ -177,6 +177,16 @@ impl ValueData {
         };
         (Self { kind }, cap)
     }
+
+    pub fn look_ahead(v: Value) -> (Self, Capture) {
+        let kind = ValueKind::LookAhead(v);
+        (Self { kind }, Capture::Slient)
+    }
+
+    pub fn look_ahead_not(v: Value) -> (Self, Capture) {
+        let kind = ValueKind::LookAheadNot(v);
+        (Self { kind }, Capture::Slient)
+    }
 }
 
 /// IR should be type-ignorant
@@ -212,6 +222,8 @@ pub enum ValueKind {
     Repeat(Value),
     Repeat1(Value),
     OrNot(Value),
+    LookAhead(Value),
+    LookAheadNot(Value),
 }
 
 impl ValueKind {
@@ -230,6 +242,8 @@ impl ValueKind {
             ValueKind::Repeat(v) => vec![*v],
             ValueKind::Repeat1(v) => vec![*v],
             ValueKind::OrNot(v) => vec![*v],
+            ValueKind::LookAhead(v) => vec![*v],
+            ValueKind::LookAheadNot(v) => vec![*v],
         }
     }
 }
@@ -307,6 +321,10 @@ impl Middle {
                 ValueKind::Repeat(v) => writeln!(fmt, "#{} = Repeat #{}", value.0, v.0)?,
                 ValueKind::Repeat1(v) => writeln!(fmt, "#{} = Repeat1 #{}", value.0, v.0)?,
                 ValueKind::OrNot(v) => writeln!(fmt, "#{} = OrNot #{}", value.0, v.0)?,
+                ValueKind::LookAhead(v) => writeln!(fmt, "#{} = LookAhead #{}", value.0, v.0)?,
+                ValueKind::LookAheadNot(v) => {
+                    writeln!(fmt, "#{} = LookAheadNot #{}", value.0, v.0)?
+                }
             }
         }
         if self.results.len() == 1 {

@@ -135,3 +135,45 @@ where
         }
     }
 }
+
+#[derive(Clone, Copy)]
+pub struct LookAhead<P> {
+    pub parser: P,
+}
+
+impl<K, T, P> Parser<K> for LookAhead<P>
+where
+    K: Copy,
+    P: Parser<K, Output = T>,
+{
+    type Output = ();
+
+    #[inline(always)]
+    fn parse(&self, state: &ParserState<K>) -> Result<(), Error> {
+        let fork = state.fork();
+        self.parser.parse(&fork)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct LookAheadNot<P> {
+    pub parser: P,
+}
+
+impl<K, T, P> Parser<K> for LookAheadNot<P>
+where
+    K: Copy,
+    P: Parser<K, Output = T>,
+{
+    type Output = ();
+
+    #[inline(always)]
+    fn parse(&self, state: &ParserState<K>) -> Result<(), Error> {
+        let fork = state.fork();
+        match self.parser.parse(&fork) {
+            Ok(_) => Err(Error::new(state.span())),
+            Err(_) => Ok(()),
+        }
+    }
+}

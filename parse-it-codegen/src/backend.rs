@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 
-use crate::middle::{Capture, Middle, Value};
+use crate::middle::{Capture, Middle, Value, ValueKind};
 use crate::Hasher;
 
 impl Value {
@@ -42,7 +42,7 @@ impl Middle {
         let arena = format_ident!("r#__arena");
         let arena_size = self
             .values()
-            .filter(|(_, v)| matches!(v.kind(), crate::middle::ValueKind::Declare))
+            .filter(|(_, v)| matches!(v.kind(), ValueKind::Declare))
             .count();
         let mut result = quote! {
             let #arena = ::parse_it::__internal::new_arena::<#arena_size>();
@@ -62,81 +62,93 @@ impl Middle {
             };
             let val = val.to_ident();
             match data.kind() {
-                crate::middle::ValueKind::Declare => result.extend(quote! {
+                ValueKind::Declare => result.extend(quote! {
                     let #val = ::parse_it::__internal::declare_recursive(&#arena);
                 }),
-                crate::middle::ValueKind::Define { decl, value } => {
+                ValueKind::Define { decl, value } => {
                     let decl = use_ident(*decl);
                     let value = use_ident(*value);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::define_recursive(#decl, #value);
                     })
                 }
-                crate::middle::ValueKind::Just(c) => result.extend(quote! {
+                ValueKind::Just(c) => result.extend(quote! {
                     let #val = ::parse_it::__internal::just_parser(#c);
                 }),
-                crate::middle::ValueKind::Map(v, c, t, e) => {
+                ValueKind::Map(v, c, t, e) => {
                     let v = use_ident(*v);
                     let c = c.to_pat();
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::map_parser::<#t, _>(#v, |#c| #e);
                     })
                 }
-                crate::middle::ValueKind::Memorize(v) => {
+                ValueKind::Memorize(v) => {
                     let v = use_ident(*v);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::memorize_parser(#v);
                     })
                 }
-                crate::middle::ValueKind::LeftRec(v) => {
+                ValueKind::LeftRec(v) => {
                     let v = use_ident(*v);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::left_rec_parser(#v);
                     })
                 }
-                crate::middle::ValueKind::Then(v1, v2) => {
+                ValueKind::Then(v1, v2) => {
                     let v1 = use_ident(*v1);
                     let v2 = use_ident(*v2);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::then_parser(#v1, #v2);
                     })
                 }
-                crate::middle::ValueKind::ThenIgnore(v1, v2) => {
+                ValueKind::ThenIgnore(v1, v2) => {
                     let v1 = use_ident(*v1);
                     let v2 = use_ident(*v2);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::then_ignore_parser(#v1, #v2);
                     })
                 }
-                crate::middle::ValueKind::IgnoreThen(v1, v2) => {
+                ValueKind::IgnoreThen(v1, v2) => {
                     let v1 = use_ident(*v1);
                     let v2 = use_ident(*v2);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::ignore_then_parser(#v1, #v2);
                     })
                 }
-                crate::middle::ValueKind::Choice(vs) => {
+                ValueKind::Choice(vs) => {
                     let vs = vs.iter().copied().map(use_ident);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::choice_parser((#(#vs),*));
                     })
                 }
-                crate::middle::ValueKind::Repeat(v) => {
+                ValueKind::Repeat(v) => {
                     let v = use_ident(*v);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::repeat_parser(#v);
                     })
                 }
-                crate::middle::ValueKind::Repeat1(v) => {
+                ValueKind::Repeat1(v) => {
                     let v = use_ident(*v);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::repeat1_parser(#v);
                     })
                 }
-                crate::middle::ValueKind::OrNot(v) => {
+                ValueKind::OrNot(v) => {
                     let v = use_ident(*v);
                     result.extend(quote! {
                         let #val = ::parse_it::__internal::or_not_parser(#v);
+                    })
+                }
+                ValueKind::LookAhead(v) => {
+                    let v = use_ident(*v);
+                    result.extend(quote! {
+                        let #val = ::parse_it::__internal::look_ahead_parser(#v);
+                    })
+                }
+                ValueKind::LookAheadNot(v) => {
+                    let v = use_ident(*v);
+                    result.extend(quote! {
+                        let #val = ::parse_it::__internal::look_ahead_not_parser(#v);
                     })
                 }
             }

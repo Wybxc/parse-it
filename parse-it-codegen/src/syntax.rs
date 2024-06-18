@@ -25,7 +25,7 @@ pub struct Rule {
 
 /// ```text
 /// Production ::= Part+
-/// Part ::= (Pat ':')? '@'? Atom ('*' | '+' | '?')?
+/// Part ::= (Pat ':')? '@'? ('&' | '!')? Atom ('*' | '+' | '?')?
 /// Atom ::= '(' Production ')'
 ///        | '[' Production ('|' Production)* ']'
 ///        | Terminal
@@ -59,4 +59,6 @@ pub enum Atom {
     Repeat(Box<Atom>),
     Repeat1(Box<Atom>),
     Optional(Box<Atom>),
+    LookAhead(Box<Atom>),
+    LookAheadNot(Box<Atom>),
 }

@@ -143,6 +143,20 @@ pub mod __internal {
     }
 
     #[inline(always)]
+    pub fn look_ahead_parser<T>(
+        parser: impl Parser<char, Output = T> + Clone,
+    ) -> LookAhead<impl Parser<char, Output = T> + Clone> {
+        LookAhead { parser }
+    }
+
+    #[inline(always)]
+    pub fn look_ahead_not_parser<T>(
+        parser: impl Parser<char, Output = T> + Clone,
+    ) -> LookAheadNot<impl Parser<char, Output = T> + Clone> {
+        LookAheadNot { parser }
+    }
+
+    #[inline(always)]
     pub fn into_parser<const N: usize, T>(
         parser: impl Parser<char, Output = T> + Clone + 'static,
         arena: &Arena<N>,

@@ -181,8 +181,10 @@ impl Parser {
             .or_insert_with(move || {
                 let mut set = HashSet::default();
                 for rule in &self.rules {
-                    if let Atom::NonTerminal(p) = &rule.production.parts.0.part {
-                        set.insert(p.to_string());
+                    for part in rule.production.first_progress() {
+                        if let Atom::NonTerminal(p) = &part.part {
+                            set.insert(p.to_string());
+                        }
                     }
                 }
                 set
@@ -233,6 +235,37 @@ impl Production {
             result = (value, cap);
         }
         Ok(result)
+    }
+
+    /// Iterate over the parts that may "make first progress" when parsing.
+    fn first_progress(&self) -> impl Iterator<Item = &Part> {
+        let mut iter = std::iter::once(&self.parts.0).chain(self.parts.1.iter());
+        let mut finished = false;
+        std::iter::from_fn(move || {
+            if finished {
+                return None;
+            }
+            for part in iter.by_ref() {
+                if part.part.must_progress() {
+                    finished = true;
+                    return Some(part);
+                } else if part.part.may_progress() {
+                    return Some(part);
+                }
+            }
+            finished = true;
+            None
+        })
+    }
+
+    /// Whether this production must make progress when parsing.
+    fn must_progress(&self) -> bool {
+        self.first_progress().any(|p| p.part.must_progress())
+    }
+
+    /// Whether this production may make progress when parsing.
+    fn may_progress(&self) -> bool {
+        self.first_progress().any(|p| p.part.may_progress())
     }
 }
 
@@ -309,6 +342,41 @@ impl Atom {
                 let value = lang.push_back(value);
                 Ok((value, capture))
             }
+            Atom::LookAhead(p) => {
+                let (value, capture) = ValueData::look_ahead(p.compile(lang, ctx)?.0);
+                let value = lang.push_back(value);
+                Ok((value, capture))
+            }
+            Atom::LookAheadNot(p) => {
+                let (value, capture) = ValueData::look_ahead_not(p.compile(lang, ctx)?.0);
+                let value = lang.push_back(value);
+                Ok((value, capture))
+            }
+        }
+    }
+
+    /// Whether this atom must make progress when parsing.
+    fn must_progress(&self) -> bool {
+        match self {
+            Atom::Terminal(_) | Atom::NonTerminal(_) => true,
+            Atom::Repeat(_) | Atom::Optional(_) | Atom::LookAhead(_) | Atom::LookAheadNot(_) => {
+                false
+            }
+            Atom::Sub(p) => p.must_progress(),
+            Atom::Choice(choices) => choices.iter().all(|p| p.must_progress()),
+
+            Atom::Repeat1(p) => p.must_progress(),
+        }
+    }
+
+    /// Whether this atom may make progress when parsing.
+    fn may_progress(&self) -> bool {
+        match self {
+            Atom::Terminal(_) | Atom::NonTerminal(_) => true,
+            Atom::LookAhead(_) | Atom::LookAheadNot(_) => false,
+            Atom::Sub(p) => p.may_progress(),
+            Atom::Choice(choices) => choices.iter().any(|p| p.may_progress()),
+            Atom::Repeat(p) | Atom::Repeat1(p) | Atom::Optional(p) => p.may_progress(),
         }
     }
 }
