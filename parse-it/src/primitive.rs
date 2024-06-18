@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use ahash::HashMap;
 
-use crate::parser::{Error, Parser, ParserState};
+use crate::parser::{Error, Parser, ParserState, Position};
 
 #[derive(Clone, Copy)]
 pub struct Just<K> {
@@ -48,12 +48,12 @@ where
     }
 }
 
-type Memo<T> = Rc<RefCell<HashMap<usize, T>>>;
+type Memo<T> = Rc<RefCell<HashMap<Position, T>>>;
 
 /// Prackrat memorization parser.
 #[derive(Clone)]
 pub struct Memorize<T, P> {
-    memo: Memo<(T, usize)>,
+    memo: Memo<(T, Position)>,
     parser: P,
 }
 
@@ -95,7 +95,7 @@ where
 /// ref: https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
 #[derive(Clone)]
 pub struct LeftRec<T, P> {
-    memo: Memo<(Option<T>, usize)>,
+    memo: Memo<(Option<T>, Position)>,
     parser: P,
 }
 
