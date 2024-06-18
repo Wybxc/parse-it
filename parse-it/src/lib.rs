@@ -6,17 +6,16 @@ pub mod parser;
 pub mod primitive;
 pub mod recursive;
 
-// use chumsky::{error::Simple, Parser as _};
 pub use parse_it_macros::parse_it;
 
 use crate::parser::{Error, ParserState, Token};
 
-pub struct Parser<const N: usize, T> {
+pub struct Parser<T> {
     _arena: std::rc::Rc<dyn std::any::Any>,
     parser: Box<dyn parser::Parser<char, Output = T>>,
 }
 
-impl<const N: usize, T> Parser<N, T> {
+impl<T> Parser<T> {
     pub fn parse(&self, src: &str) -> Result<T, Error> {
         let state = ParserState::new(
             src.char_indices()
@@ -142,7 +141,7 @@ pub mod __internal {
     pub fn into_parser<const N: usize, T>(
         parser: impl Parser<char, Output = T> + Clone + 'static,
         arena: &Arena<N>,
-    ) -> super::Parser<N, T> {
+    ) -> super::Parser<T> {
         super::Parser {
             parser: Box::new(parser),
             _arena: arena.inner(),
