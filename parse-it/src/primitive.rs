@@ -129,16 +129,17 @@ where
 
         self.memo.borrow_mut().insert(pos, (None, pos));
         let mut last = pos;
-        loop {
+        let end = loop {
             let fork = state.fork();
             let value = self.parser.parse(&fork)?;
             let end = fork.pos();
             if end <= last {
-                break;
+                break end;
             }
             last = end;
             self.memo.borrow_mut().insert(pos, (Some(value), end));
-        }
+        };
+        state.advance_to_pos(end);
         self.memo.borrow()[&pos]
             .0
             .clone()
