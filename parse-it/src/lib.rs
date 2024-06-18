@@ -72,6 +72,25 @@ pub mod __internal {
     }
 
     #[inline(always)]
+    pub fn choice_parser<P>(parsers: P) -> Choice<P> {
+        Choice { parsers }
+    }
+
+    #[inline(always)]
+    pub fn memorize_parser<T>(
+        parser: impl Parser<char, Output = T> + Clone,
+    ) -> Memorize<T, impl Parser<char, Output = T> + Clone> {
+        Memorize::new(parser)
+    }
+
+    #[inline(always)]
+    pub fn left_rec_parser<T>(
+        parser: impl Parser<char, Output = T> + Clone,
+    ) -> LeftRec<T, impl Parser<char, Output = T> + Clone> {
+        LeftRec::new(parser)
+    }
+
+    #[inline(always)]
     pub fn then_parser<T, U>(
         parser1: impl Parser<char, Output = T> + Clone,
         parser2: impl Parser<char, Output = U> + Clone,
@@ -95,11 +114,6 @@ pub mod __internal {
     ) -> IgnoreThen<impl Parser<char, Output = T> + Clone, impl Parser<char, Output = U> + Clone>
     {
         IgnoreThen { parser1, parser2 }
-    }
-
-    #[inline(always)]
-    pub fn choice_parser<P>(parsers: P) -> Choice<P> {
-        Choice { parsers }
     }
 
     #[inline(always)]

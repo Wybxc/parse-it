@@ -80,6 +80,18 @@ impl Middle {
                         let #val = ::parse_it::__internal::map_parser::<#t, _>(#v, |#c| #e);
                     })
                 }
+                crate::middle::ValueKind::Memorize(v) => {
+                    let v = use_ident(*v);
+                    result.extend(quote! {
+                        let #val = ::parse_it::__internal::memorize_parser(#v);
+                    })
+                }
+                crate::middle::ValueKind::LeftRec(v) => {
+                    let v = use_ident(*v);
+                    result.extend(quote! {
+                        let #val = ::parse_it::__internal::left_rec_parser(#v);
+                    })
+                }
                 crate::middle::ValueKind::Then(v1, v2) => {
                     let v1 = use_ident(*v1);
                     let v2 = use_ident(*v2);

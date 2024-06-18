@@ -40,16 +40,16 @@ impl<K: Copy> ParserState<K> {
         }
     }
 
+    pub fn pos(&self) -> usize {
+        self.pos.get()
+    }
+
     pub fn span(&self) -> (usize, usize) {
         if self.is_empty() {
             (self.items.len(), self.items.len())
         } else {
             self.items[self.pos.get()].span
         }
-    }
-
-    pub fn peek(&self, f: impl Fn(Token<K>) -> bool) -> bool {
-        self.items.get(self.pos.get()).copied().map_or(false, f)
     }
 
     pub fn next(&self) -> Option<Token<K>> {
@@ -68,6 +68,10 @@ impl<K: Copy> ParserState<K> {
 
     pub fn advance_to(&self, other: &Self) {
         self.pos.set(other.pos.get());
+    }
+
+    pub fn advance_to_pos(&self, pos: usize) {
+        self.pos.set(pos)
     }
 
     pub fn fork(&self) -> Self {

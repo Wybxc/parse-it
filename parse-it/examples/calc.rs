@@ -13,20 +13,20 @@ fn main() {
         }
 
         AddExpr -> i32 {
-            lhs:MulExpr '+' rhs:AddExpr => {
+            lhs:AddExpr '+' rhs:MulExpr => {
                 lhs + rhs
             }
-            lhs:MulExpr '-' rhs:AddExpr => {
+            lhs:AddExpr '-' rhs:MulExpr => {
                 lhs - rhs
             }
             MulExpr => self,
         }
 
         MulExpr -> i32 {
-            lhs:Term '*' rhs:MulExpr => {
+            lhs:MulExpr '*' rhs:Term => {
                 lhs * rhs
             }
-            lhs:Term '/' rhs:MulExpr => {
+            lhs:MulExpr '/' rhs:Term => {
                 lhs / rhs
             }
             Term => self,
@@ -40,7 +40,7 @@ fn main() {
         return Expr;
     };
 
-    let input = "11+2*(3+4)/5";
+    let input = "11+(6-1-1)*(4/2/2)";
 
     let result = match parser.parse(input) {
         Ok(value) => value,
@@ -52,5 +52,5 @@ fn main() {
     };
 
     println!("parser: {}", result);
-    assert_eq!(result, 13);
+    assert_eq!(result, 15);
 }

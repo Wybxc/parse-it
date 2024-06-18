@@ -35,6 +35,7 @@ where
 {
     type Output = T;
 
+    #[inline(always)]
     fn parse(&self, state: &ParserState<K>) -> Result<Self::Output, Error> {
         self.inner.get().parse(state)
     }

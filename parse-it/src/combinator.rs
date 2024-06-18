@@ -13,6 +13,7 @@ where
 {
     type Output = U;
 
+    #[inline(always)]
     fn parse(&self, state: &ParserState<K>) -> Result<U, Error> {
         self.parser.parse(state).map(&self.f)
     }
@@ -31,6 +32,7 @@ where
 {
     type Output = (T, U);
 
+    #[inline(always)]
     fn parse(&self, state: &ParserState<K>) -> Result<(T, U), Error> {
         let value1 = self.parser1.parse(state)?;
         let value2 = self.parser2.parse(state)?;
@@ -51,6 +53,7 @@ where
 {
     type Output = T;
 
+    #[inline(always)]
     fn parse(&self, state: &ParserState<K>) -> Result<T, Error> {
         let value1 = self.parser1.parse(state)?;
         self.parser2.parse(state)?;
@@ -71,6 +74,7 @@ where
 {
     type Output = U;
 
+    #[inline(always)]
     fn parse(&self, state: &ParserState<K>) -> Result<U, Error> {
         self.parser1.parse(state)?;
         self.parser2.parse(state)
@@ -90,6 +94,7 @@ where
 {
     type Output = Vec<T>;
 
+    #[inline(always)]
     fn parse(&self, state: &ParserState<K>) -> Result<Vec<T>, Error> {
         let mut values = Vec::new();
         let fork = state.fork();
@@ -118,6 +123,7 @@ where
 {
     type Output = Option<T>;
 
+    #[inline(always)]
     fn parse(&self, state: &ParserState<K>) -> Result<Option<T>, Error> {
         let fork = state.fork();
         match self.parser.parse(&fork) {

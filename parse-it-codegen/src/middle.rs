@@ -134,6 +134,18 @@ impl ValueData {
         }
     }
 
+    pub fn memorize(v: Value, leftrec: bool) -> Self {
+        if leftrec {
+            Self {
+                kind: ValueKind::LeftRec(v),
+            }
+        } else {
+            Self {
+                kind: ValueKind::Memorize(v),
+            }
+        }
+    }
+
     pub fn repeat((v, cap): (Value, Capture)) -> (Self, Capture) {
         let kind = ValueKind::Repeat(v);
         let cap = if cap.is_loud() {
@@ -188,6 +200,8 @@ pub enum ValueKind {
     Define { decl: Value, value: Value },
     Just(char),
     Map(Value, Capture, syn::Type, syn::Expr),
+    Memorize(Value),
+    LeftRec(Value),
 
     Then(Value, Value),
     ThenIgnore(Value, Value),
@@ -205,6 +219,8 @@ impl ValueKind {
             ValueKind::Define { decl, value } => vec![*decl, *value],
             ValueKind::Just(_) => vec![],
             ValueKind::Map(v, _, _, _) => vec![*v],
+            ValueKind::Memorize(v) => vec![*v],
+            ValueKind::LeftRec(v) => vec![*v],
             ValueKind::Then(v1, v2) => vec![*v1, *v2],
             ValueKind::ThenIgnore(v1, v2) => vec![*v1, *v2],
             ValueKind::IgnoreThen(v1, v2) => vec![*v1, *v2],
@@ -268,6 +284,8 @@ impl Middle {
                 ValueKind::Map(v, _, _, e) => {
                     writeln!(fmt, "#{} = Map #{} {}", value.0, v.0, e.to_token_stream())?
                 }
+                ValueKind::Memorize(v) => writeln!(fmt, "#{} = Memorize #{}", value.0, v.0)?,
+                ValueKind::LeftRec(v) => writeln!(fmt, "#{} = LeftRec #{}", value.0, v.0)?,
                 ValueKind::Then(v1, v2) => {
                     writeln!(fmt, "#{} = Then #{} #{}", value.0, v1.0, v2.0)?
                 }

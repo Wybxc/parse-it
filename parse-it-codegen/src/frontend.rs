@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote_spanned};
@@ -10,8 +10,11 @@ use crate::{
     Hasher,
 };
 
+#[derive(Default)]
 struct Context {
     pub symbols: HashMap<String, Symbol, Hasher>,
+    pub left_calls: HashMap<String, HashSet<String, Hasher>, Hasher>,
+    pub left_recursion: HashSet<String, Hasher>,
 }
 
 enum Symbol {
@@ -33,9 +36,7 @@ impl Symbol {
 
 impl Context {
     fn new() -> Self {
-        Self {
-            symbols: HashMap::default(),
-        }
+        Self::default()
     }
 }
 
@@ -71,6 +72,8 @@ impl ParseIt {
         let mut lang = Middle::new();
         let mut ctx = Context::new();
 
+        self.analyze_left_recursion(&mut ctx);
+
         for parser in self.parsers {
             parser.compile(&mut lang, &mut ctx)?;
         }
@@ -95,6 +98,44 @@ impl ParseIt {
 
         Ok(lang)
     }
+
+    fn analyze_left_recursion(&self, ctx: &mut Context) {
+        fn dfs(
+            name: &str,
+            stack: &mut HashSet<String, Hasher>,
+            left_calls: &HashMap<String, HashSet<String, Hasher>, Hasher>,
+            left_recursion: &mut HashSet<String, Hasher>,
+        ) {
+            stack.insert(name.to_string());
+
+            for leftcall in &left_calls[name] {
+                if stack.contains(leftcall) {
+                    left_recursion.extend(stack.iter().cloned());
+                    return;
+                } else {
+                    dfs(leftcall, stack, left_calls, left_recursion);
+                }
+            }
+
+            stack.remove(name);
+        }
+
+        for parser in &self.parsers {
+            parser.analyze_left_calls(ctx);
+        }
+
+        for parser in &self.parsers {
+            let name = parser.name.to_string();
+            if !ctx.left_recursion.contains(&name) {
+                dfs(
+                    &name,
+                    &mut HashSet::default(),
+                    &ctx.left_calls,
+                    &mut ctx.left_recursion,
+                );
+            }
+        }
+    }
 }
 
 impl Parser {
@@ -115,6 +156,10 @@ impl Parser {
             let rules = ValueData::choice_nocap(rules);
             lang.push_back(rules)
         };
+        let value = lang.push_back(ValueData::memorize(
+            value,
+            ctx.left_recursion.contains(&self.name.to_string()),
+        ));
 
         let name = self.name.to_string();
         if let Some(symbol) = ctx.symbols.get_mut(&name) {
@@ -130,6 +175,20 @@ impl Parser {
         }
 
         Ok(())
+    }
+
+    fn analyze_left_calls<'a>(&self, ctx: &'a mut Context) -> &'a HashSet<String, Hasher> {
+        ctx.left_calls
+            .entry(self.name.to_string())
+            .or_insert_with(move || {
+                let mut set = HashSet::default();
+                for rule in &self.rules {
+                    if let Atom::NonTerminal(p) = &rule.production.parts.0.part {
+                        set.insert(p.to_string());
+                    }
+                }
+                set
+            })
     }
 }
 
