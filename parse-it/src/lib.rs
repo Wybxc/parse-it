@@ -6,22 +6,17 @@ pub mod parser;
 pub mod primitive;
 pub mod recursive;
 
-use std::rc::Rc;
-
 // use chumsky::{error::Simple, Parser as _};
 pub use parse_it_macros::parse_it;
 
-use crate::{
-    arena::Arena,
-    parser::{Error, ParserState, Token},
-};
+use crate::parser::{Error, ParserState, Token};
 
-pub struct Parser<T> {
-    _arena: Rc<Arena>,
+pub struct Parser<const N: usize, T> {
+    _arena: std::rc::Rc<dyn std::any::Any>,
     parser: Box<dyn parser::Parser<char, Output = T>>,
 }
 
-impl<T> Parser<T> {
+impl<const N: usize, T> Parser<N, T> {
     pub fn parse(&self, src: &str) -> Result<T, Error> {
         let state = ParserState::new(
             src.char_indices()
@@ -41,20 +36,20 @@ pub mod __internal {
     use crate::{arena::Arena, combinator::*, parser::Parser, primitive::*, recursive::*};
 
     #[inline(always)]
-    pub fn new_arena() -> std::rc::Rc<Arena> {
+    pub fn new_arena<const N: usize>() -> Arena<N> {
         Arena::new()
     }
 
     #[inline(always)]
-    pub fn declare_recursive<K, T>(arena: std::rc::Rc<Arena>) -> Recursive<K, T> {
+    pub fn declare_recursive<const N: usize, K, T>(arena: &Arena<N>) -> Recursive<N, K, T> {
         Recursive::declare(arena)
     }
 
     #[inline(always)]
-    pub fn define_recursive<K: 'static, T: 'static>(
-        decl: Recursive<K, T>,
+    pub fn define_recursive<const N: usize, K: 'static, T: 'static>(
+        decl: Recursive<N, K, T>,
         value: impl Parser<K, Output = T> + 'static,
-    ) -> Recursive<K, T> {
+    ) -> Recursive<N, K, T> {
         decl.define(value)
     }
 
@@ -144,13 +139,13 @@ pub mod __internal {
     }
 
     #[inline(always)]
-    pub fn into_parser<T>(
+    pub fn into_parser<const N: usize, T>(
         parser: impl Parser<char, Output = T> + Clone + 'static,
-        arena: std::rc::Rc<Arena>,
-    ) -> super::Parser<T> {
+        arena: &Arena<N>,
+    ) -> super::Parser<N, T> {
         super::Parser {
             parser: Box::new(parser),
-            _arena: arena.clone(),
+            _arena: arena.inner(),
         }
     }
 }

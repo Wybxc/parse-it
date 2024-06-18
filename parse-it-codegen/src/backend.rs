@@ -42,8 +42,12 @@ impl Capture {
 impl Middle {
     pub fn expand(self) -> TokenStream {
         let arena = format_ident!("r#__arena");
+        let arena_size = self
+            .values()
+            .filter(|(_, v)| matches!(v.kind(), crate::middle::ValueKind::Declare))
+            .count();
         let mut result = quote! {
-            let #arena = ::parse_it::__internal::new_arena();
+            let #arena = ::parse_it::__internal::new_arena::<#arena_size>();
         };
         let last_use = self.analyze_last_use();
 
@@ -61,7 +65,7 @@ impl Middle {
             let val = val.to_ident();
             match data.kind() {
                 crate::middle::ValueKind::Declare => result.extend(quote! {
-                    let #val = ::parse_it::__internal::declare_recursive(#arena.clone());
+                    let #val = ::parse_it::__internal::declare_recursive(&#arena);
                 }),
                 crate::middle::ValueKind::Define { decl, value } => {
                     let decl = use_ident(*decl);
@@ -142,7 +146,7 @@ impl Middle {
 
         let results = self.results.into_iter().map(|v| {
             let v = v.to_ident();
-            quote! { ::parse_it::__internal::into_parser(#v, #arena.clone()) }
+            quote! { ::parse_it::__internal::into_parser(#v, &#arena) }
         });
         result.extend(quote! {
             (#(#results),*)

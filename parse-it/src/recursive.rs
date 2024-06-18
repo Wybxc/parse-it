@@ -1,17 +1,15 @@
-use std::rc::Rc;
-
 use crate::{
     arena::{Arena, Slot},
     parser::{Error, Parser, ParserState},
 };
 
 #[derive(Clone)]
-pub struct Recursive<K, T> {
-    inner: Slot<Box<dyn Parser<K, Output = T>>>,
+pub struct Recursive<const N: usize, K, T> {
+    inner: Slot<N, Box<dyn Parser<K, Output = T>>>,
 }
 
-impl<K, T> Recursive<K, T> {
-    pub fn declare(arena: Rc<Arena>) -> Self {
+impl<const N: usize, K, T> Recursive<N, K, T> {
+    pub fn declare(arena: &Arena<N>) -> Self {
         Recursive {
             inner: arena.alloc(),
         }
@@ -28,7 +26,7 @@ impl<K, T> Recursive<K, T> {
     }
 }
 
-impl<K, T> Parser<K> for Recursive<K, T>
+impl<const N: usize, K, T> Parser<K> for Recursive<N, K, T>
 where
     K: 'static,
     T: 'static,
@@ -37,6 +35,6 @@ where
 
     #[inline(always)]
     fn parse(&self, state: &ParserState<K>) -> Result<Self::Output, Error> {
-        self.inner.get().parse(state)
+        self.inner.with(|parser| parser.parse(state))
     }
 }
