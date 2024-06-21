@@ -1,17 +1,43 @@
-use syn::{parse::discouraged::Speculative, Token};
+use std::rc::Rc;
+
+use syn::parse::discouraged::Speculative;
+use syn::punctuated::Punctuated;
+use syn::Token;
+
+#[derive(Debug)]
+pub struct ParseItConfig {
+    pub crate_name: Option<syn::Path>,
+    pub parse_macros: Rc<Vec<syn::Path>>,
+}
+
+impl Default for ParseItConfig {
+    fn default() -> Self {
+        Self {
+            crate_name: None,
+            parse_macros: Rc::new(vec![
+                syn::parse_quote! { print },
+                syn::parse_quote! { println },
+                syn::parse_quote! { eprint },
+                syn::parse_quote! { eprintln },
+                syn::parse_quote! { format },
+                syn::parse_quote! { dbg },
+            ]),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct ParseIt {
     pub attrs: Vec<syn::Attribute>,
-    pub crate_name: Option<syn::Path>,
     pub mod_name: syn::Ident,
     pub items: Vec<syn::Item>,
     pub parsers: Vec<Parser>,
+    pub config: ParseItConfig,
 }
 
 impl syn::parse::Parse for ParseIt {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut crate_name = None;
+        let mut config = ParseItConfig::default();
         let mut attrs = vec![];
         for attr in input.call(syn::Attribute::parse_outer)? {
             if attr.path().is_ident("parse_it") {
@@ -19,9 +45,24 @@ impl syn::parse::Parse for ParseIt {
                     if meta.path.is_ident("crate") {
                         let value = meta.value()?;
                         let value = value.parse::<syn::LitStr>()?;
-                        crate_name = Some(value.parse().map_err(|_| {
+                        config.crate_name = Some(value.parse().map_err(|_| {
                             syn::Error::new_spanned(value, "expected a valid path")
                         })?);
+                    } else if meta.path.is_ident("parse_macros") {
+                        let value = meta.value()?;
+                        let value = value.parse::<syn::LitStr>()?;
+                        config.parse_macros = Rc::new(
+                            value
+                                .parse_with(Punctuated::<syn::Path, Token![,]>::parse_terminated)
+                                .map_err(|_| {
+                                    syn::Error::new_spanned(
+                                        value,
+                                        "expected a list of paths separated by commas",
+                                    )
+                                })?
+                                .into_iter()
+                                .collect(),
+                        );
                     } else {
                         Err(syn::Error::new_spanned(meta.path, "unknown attribute"))?
                     }
@@ -51,10 +92,10 @@ impl syn::parse::Parse for ParseIt {
         }
         Ok(ParseIt {
             attrs,
-            crate_name,
             items,
             mod_name,
             parsers,
+            config,
         })
     }
 }
