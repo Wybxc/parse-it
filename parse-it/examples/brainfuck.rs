@@ -1,7 +1,9 @@
 use std::io::Read;
 
-#[derive(Clone)]
-enum Instr {
+use parse_it::ParseIt;
+
+#[derive(Debug, Clone)]
+pub enum Instr {
     Left,
     Right,
     Incr,
@@ -11,25 +13,26 @@ enum Instr {
     Loop(Vec<Self>),
 }
 
+parse_it::parse_it! {
+    Brainfuck -> Vec<Instr> {
+        Primitive* => self,
+    }
+
+    Primitive -> Instr {
+        '<' => Instr::Left,
+        '>' => Instr::Right,
+        '+' => Instr::Incr,
+        '-' => Instr::Decr,
+        ',' => Instr::Read,
+        '.' => Instr::Write,
+        '[' Primitive+ ']' => Instr::Loop(self)
+    }
+
+    return Brainfuck;
+}
+
 fn main() {
-    let parser = parse_it::parse_it! {
-        Brainfuck -> Vec<Instr> {
-            Primitive* => self,
-        }
-
-        Primitive -> Instr {
-            '<' => Instr::Left,
-            '>' => Instr::Right,
-            '+' => Instr::Incr,
-            '-' => Instr::Decr,
-            ',' => Instr::Read,
-            '.' => Instr::Write,
-            '[' Primitive+ ']' => Instr::Loop(self)
-        }
-
-        return Brainfuck;
-    };
-
+    let parser = Brainfuck::default();
     let src = "--[>--->->->++>-<<<<<-------]>--.>---------.>--..+++.>----.>+++++++++.<<.+++.------.<-.>>+.";
 
     match parser.parse(src) {

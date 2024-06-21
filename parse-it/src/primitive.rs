@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ahash::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::parser::{Error, Parser, ParserState, Position};
 

@@ -21,7 +21,11 @@ fn parse(input: ParseStream) -> Result<ParseIt> {
         }
         parsers.push(input.call(parse_parser)?);
     }
-    Ok(ParseIt { parsers, results })
+    Ok(ParseIt {
+        crate_name: None, // TODO: parse crate name
+        parsers,
+        results,
+    })
 }
 
 fn parse_parser(input: ParseStream) -> Result<Parser> {
@@ -31,17 +35,14 @@ fn parse_parser(input: ParseStream) -> Result<Parser> {
 
     let content;
     syn::braced!(content in input);
-    // let rules = content.parse_terminated(parse_rule, Token![,])?;
+
+    let first_rule = content.call(parse_rule)?;
     let mut rules = vec![];
     while !content.is_empty() {
         let rule = content.call(parse_rule)?;
-        if (requires_comma_to_be_match_arm(&rule.action) && !content.is_empty())
-            || content.peek(Token![,])
-        {
-            content.parse::<Token![,]>()?;
-        }
         rules.push(rule);
     }
+    let rules = (first_rule, rules);
 
     Ok(Parser { name, ty, rules })
 }
@@ -50,6 +51,9 @@ fn parse_rule(input: ParseStream) -> Result<Rule> {
     let production = input.call(parse_production)?;
     input.parse::<Token![=>]>()?;
     let action = input.parse::<syn::Expr>()?;
+    if (requires_comma_to_be_match_arm(&action) && !input.is_empty()) || input.peek(Token![,]) {
+        input.parse::<Token![,]>()?;
+    }
     Ok(Rule { production, action })
 }
 
@@ -125,8 +129,13 @@ fn parse_atom(input: ParseStream) -> Result<Atom> {
         // Atom ::= '[' Production ('|' Production)* ']'
         let content;
         syn::bracketed!(content in input);
-        let choices = content.parse_terminated(parse_production, Token![|])?;
-        Atom::Choice(choices.into_iter().collect())
+        let mut choices = content
+            .parse_terminated(parse_production, Token![|])?
+            .into_iter();
+        let first_choice = choices
+            .next()
+            .ok_or_else(|| content.error("expected at least one choice"))?;
+        Atom::Choice(Box::new(first_choice), choices.collect())
     } else if lookahead.peek(syn::Lit) {
         // Atom ::= Terminal
         Atom::Terminal(input.parse()?)
@@ -147,7 +156,10 @@ pub fn parse_it(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         Ok(middle) => middle,
         Err(msg) => return msg.into(),
     };
-    middle.expand().into()
+    match middle.expand() {
+        Ok(expanded) => expanded.into(),
+        Err(msg) => msg.into(),
+    }
 }
 
 fn requires_comma_to_be_match_arm(expr: &syn::Expr) -> bool {

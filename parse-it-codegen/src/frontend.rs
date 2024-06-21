@@ -1,41 +1,19 @@
-use std::collections::{HashMap, HashSet};
+use std::vec;
 
-use proc_macro2::TokenStream;
-use quote::{format_ident, quote_spanned};
+use proc_macro2::{Span, TokenStream};
+use quote::{format_ident, quote, quote_spanned};
 use syn::visit_mut::VisitMut;
 
-use crate::middle::{Capture, Middle, Value, ValueData};
+use crate::hash::{HashMap, HashSet, OrderedMap, OrderedSet};
+use crate::middle::{Capture, MemoKind, Middle, ParserImpl, ParserRef, Parsing};
 use crate::syntax::{Atom, ParseIt, Parser, Part, Production, Rule};
-use crate::Hasher;
 
 #[derive(Default)]
 struct Context {
-    pub symbols: HashMap<String, Symbol, Hasher>,
-    pub left_calls: HashMap<String, HashSet<String, Hasher>, Hasher>,
-    pub left_recursion: HashSet<String, Hasher>,
-}
-
-enum Symbol {
-    Decl(Value, syn::Ident),
-    Defined(Value),
-}
-
-impl Symbol {
-    fn value(&self) -> Value {
-        match self {
-            Symbol::Decl(value, _) | Symbol::Defined(value) => *value,
-        }
-    }
-
-    fn initialized(&self) -> bool {
-        matches!(self, Symbol::Defined(_))
-    }
-}
-
-impl Context {
-    fn new() -> Self {
-        Self::default()
-    }
+    pub left_calls: HashMap<syn::Ident, HashSet<syn::Ident>>,
+    pub left_recursion: HashSet<syn::Ident>,
+    pub direct_depends: HashMap<syn::Ident, OrderedMap<syn::Ident, ParserRef>>,
+    pub depends: HashMap<syn::Ident, OrderedMap<syn::Ident, ParserRef>>,
 }
 
 struct ExprVisitor {
@@ -48,7 +26,7 @@ struct ExprVisitor {
 impl ExprVisitor {
     pub fn new() -> Self {
         Self {
-            self_ident: format_ident!("r#__self"),
+            self_ident: format_ident!("r#__self", span = Span::call_site()),
             referred_self: false,
         }
     }
@@ -67,144 +45,140 @@ impl VisitMut for ExprVisitor {
 
 impl ParseIt {
     pub fn compile(self) -> Result<Middle, TokenStream> {
-        let mut lang = Middle::new();
-        let mut ctx = Context::new();
+        let mut middle = Middle::new(match &self.crate_name {
+            Some(crate_name) => quote! { #crate_name },
+            None => quote! { ::parse_it },
+        });
+        let mut ctx = Context::default();
 
         self.analyze_left_recursion(&mut ctx);
+        self.analyze_depends(&mut ctx);
 
         for parser in self.parsers {
-            parser.compile(&mut lang, &mut ctx)?;
-        }
-
-        for symbol in ctx.symbols.values() {
-            if let Symbol::Decl(_, id) = symbol {
-                return Err(quote_spanned! {
-                    id.span() => compile_error!("undefined parser")
-                });
-            }
+            let parser = parser.compile(&mut ctx)?;
+            middle.parsers.push(parser);
         }
 
         for name in self.results {
-            if let Some(sym) = ctx.symbols.get(&name.to_string()) {
-                lang.results.push(sym.value());
-            } else {
-                return Err(quote_spanned! {
-                    name.span() => compile_error!("undefined parser")
-                });
-            }
+            middle.results.push(name);
         }
 
-        Ok(lang)
+        Ok(middle)
     }
 
     fn analyze_left_recursion(&self, ctx: &mut Context) {
-        fn dfs(
-            name: &str,
-            stack: &mut HashSet<String, Hasher>,
-            left_calls: &HashMap<String, HashSet<String, Hasher>, Hasher>,
-            left_recursion: &mut HashSet<String, Hasher>,
-        ) {
-            stack.insert(name.to_string());
-
-            for leftcall in &left_calls[name] {
-                if stack.contains(leftcall) {
-                    left_recursion.extend(stack.iter().cloned());
-                    return;
-                } else {
-                    dfs(leftcall, stack, left_calls, left_recursion);
-                }
-            }
-
-            stack.remove(name);
-        }
-
         for parser in &self.parsers {
             parser.analyze_left_calls(ctx);
         }
 
-        for parser in &self.parsers {
-            let name = parser.name.to_string();
-            if !ctx.left_recursion.contains(&name) {
-                dfs(
-                    &name,
-                    &mut HashSet::default(),
-                    &ctx.left_calls,
-                    &mut ctx.left_recursion,
-                );
+        // left recursion is a FVS in the left_calls graph
+        for name in ctx.left_calls.keys() {
+            if ctx.left_recursion.contains(name) {
+                continue;
             }
+            let mut stack = OrderedSet::default();
+            stack.insert(name);
+            while let Some(name) = stack.pop_back() {
+                for dep in &ctx.left_calls[name] {
+                    if ctx.left_recursion.contains(dep) {
+                        continue;
+                    }
+                    if !stack.insert(dep) || dep == name {
+                        ctx.left_recursion.insert(name.clone());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    fn analyze_depends(&self, ctx: &mut Context) {
+        for parser in &self.parsers {
+            parser.analyze_direct_depends(ctx);
+        }
+
+        // full dependencies are transitive closure of direct dependencies
+        for name in ctx.direct_depends.keys() {
+            let mut depends = OrderedMap::default();
+            let mut stack = vec![name];
+            while let Some(name) = stack.pop() {
+                if depends.contains_key(name) {
+                    continue;
+                }
+                depends.insert(name.clone(), ParserRef::new(name));
+                stack.extend(ctx.direct_depends[name].keys());
+            }
+            depends.remove(name);
+            ctx.depends.insert(name.clone(), depends);
         }
     }
 }
 
 impl Parser {
-    fn compile(self, lang: &mut Middle, ctx: &mut Context) -> Result<(), TokenStream> {
-        if self.rules.is_empty() {
-            return Err(quote_spanned! {
-                self.name.span() => compile_error!("empty parser")
-            });
+    fn compile(self, ctx: &mut Context) -> Result<ParserImpl, TokenStream> {
+        let curr = ParserRef::new(&self.name);
+        let depends = ctx.depends[&self.name]
+            .iter()
+            .map(|(p, i)| (i.clone(), p.clone()))
+            .collect();
+        let mut parser = self.rules.0.compile(ctx)?;
+        if !self.rules.1.is_empty() {
+            parser = parser.choice_nocap(self.rules.1.into_iter().map(|rule| rule.compile(ctx)))?;
         }
-        let rules = self
-            .rules
-            .into_iter()
-            .map(|rule| rule.compile(lang, ctx, self.ty.clone()))
-            .collect::<Result<Vec<_>, _>>()?;
-        let value = if rules.len() == 1 {
-            rules.into_iter().next().unwrap()
+
+        let memo = if ctx.left_recursion.contains(&self.name) {
+            MemoKind::LeftRec
         } else {
-            let rules = ValueData::choice_nocap(rules);
-            lang.push_back(rules)
+            MemoKind::Memorize
         };
-        let value = lang.push_back(ValueData::memorize(
-            value,
-            ctx.left_recursion.contains(&self.name.to_string()),
-        ));
 
-        let name = self.name.to_string();
-        if let Some(symbol) = ctx.symbols.get_mut(&name) {
-            if symbol.initialized() {
-                return Err(quote_spanned! {
-                    self.name.span() => compile_error!("redefinition of parser")
-                });
-            }
-            let value = lang.push_back(ValueData::define(symbol.value(), value));
-            *symbol = Symbol::Defined(value);
-        } else {
-            ctx.symbols.insert(name, Symbol::Defined(value));
-        }
-
-        Ok(())
+        Ok(ParserImpl {
+            name: self.name,
+            curr,
+            parser,
+            memo,
+            ret_ty: self.ty,
+            depends,
+        })
     }
 
-    fn analyze_left_calls<'a>(&self, ctx: &'a mut Context) -> &'a HashSet<String, Hasher> {
+    fn analyze_left_calls<'a>(&self, ctx: &'a mut Context) -> &'a HashSet<syn::Ident> {
         ctx.left_calls
-            .entry(self.name.to_string())
+            .entry(self.name.clone())
             .or_insert_with(move || {
                 let mut set = HashSet::default();
-                for rule in &self.rules {
-                    for part in rule.production.first_progress() {
-                        if let Atom::NonTerminal(p) = &part.part {
-                            set.insert(p.to_string());
-                        }
-                    }
+                for rule in self.rules() {
+                    set.extend(rule.left_calls());
                 }
                 set
+            })
+    }
+
+    fn analyze_direct_depends<'a>(
+        &self,
+        ctx: &'a mut Context,
+    ) -> &'a OrderedMap<syn::Ident, ParserRef> {
+        ctx.direct_depends
+            .entry(self.name.clone())
+            .or_insert_with(move || {
+                let mut depends = OrderedMap::default();
+                for rule in self.rules() {
+                    rule.production
+                        .analyze_direct_depends(&mut depends, &self.name);
+                }
+                depends
             })
     }
 }
 
 impl Rule {
-    fn compile(
-        mut self,
-        lang: &mut Middle,
-        ctx: &mut Context,
-        ty: syn::Type,
-    ) -> Result<Value, TokenStream> {
-        let (value, mut capture) = self.production.compile(lang, ctx)?;
+    fn compile(mut self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
+        let mut parser = self.production.compile(ctx)?;
 
         let mut visitor = ExprVisitor::new();
         visitor.visit_expr_mut(&mut self.action);
         if visitor.referred_self {
-            capture = Capture::Named(
+            parser.capture = Capture::Named(
                 Box::new(syn::Pat::Ident(syn::PatIdent {
                     attrs: Vec::new(),
                     by_ref: None,
@@ -212,34 +186,36 @@ impl Rule {
                     ident: visitor.self_ident,
                     subpat: None,
                 })),
-                Box::new(capture),
+                Box::new(parser.capture),
             );
         }
 
-        let value = ValueData::map(value, capture, ty, self.action);
-        let value = lang.push_back(value);
-        Ok(value)
+        Ok(parser.map(self.action))
+    }
+
+    fn left_calls(&self) -> impl Iterator<Item = syn::Ident> + '_ {
+        self.production
+            .first_progress()
+            .filter_map(|part| match &part.part {
+                Atom::NonTerminal(p) => Some(p.clone()),
+                _ => None,
+            })
     }
 }
 
 impl Production {
-    fn compile(
-        self,
-        lang: &mut Middle,
-        ctx: &mut Context,
-    ) -> Result<(Value, Capture), TokenStream> {
-        let mut result = self.parts.0.compile(lang, ctx)?;
+    fn compile(self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
+        let mut result = self.parts.0.compile(ctx)?;
         for part in self.parts.1 {
-            let (value, cap) = ValueData::then(result, part.compile(lang, ctx)?);
-            let value = lang.push_back(value);
-            result = (value, cap);
+            let part = part.compile(ctx)?;
+            result = result.then(Box::new(part));
         }
         Ok(result)
     }
 
     /// Iterate over the parts that may "make first progress" when parsing.
     fn first_progress(&self) -> impl Iterator<Item = &Part> {
-        let mut iter = std::iter::once(&self.parts.0).chain(self.parts.1.iter());
+        let mut iter = self.parts();
         let mut finished = false;
         std::iter::from_fn(move || {
             if finished {
@@ -258,6 +234,16 @@ impl Production {
         })
     }
 
+    fn analyze_direct_depends(
+        &self,
+        depends: &mut OrderedMap<syn::Ident, ParserRef>,
+        curr: &syn::Ident,
+    ) {
+        for part in self.parts() {
+            part.part.analyze_direct_depends(depends, curr);
+        }
+    }
+
     /// Whether this production must make progress when parsing.
     fn must_progress(&self) -> bool {
         self.first_progress().any(|p| p.part.must_progress())
@@ -270,88 +256,71 @@ impl Production {
 }
 
 impl Part {
-    fn compile(
-        self,
-        lang: &mut Middle,
-        ctx: &mut Context,
-    ) -> Result<(Value, Capture), TokenStream> {
-        let (value, capture) = self.part.compile(lang, ctx)?;
-        let capture = match self.capture {
-            crate::syntax::Capture::Named(name) => Capture::Named(name, Box::new(capture)),
+    fn compile(self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
+        let mut parser = self.part.compile(ctx)?;
+        match self.capture {
+            crate::syntax::Capture::Named(name) => {
+                parser.capture = Capture::Named(name, Box::new(parser.capture));
+            }
             crate::syntax::Capture::Loud => {
-                if capture.is_loud() {
-                    capture
-                } else {
-                    Capture::Loud
+                if !parser.capture.is_loud() {
+                    parser.capture = Capture::Loud;
                 }
             }
-            crate::syntax::Capture::NotSpecified => capture,
-        };
-        Ok((value, capture))
+            crate::syntax::Capture::NotSpecified => {}
+        }
+        Ok(parser)
     }
 }
 
 impl Atom {
-    fn compile(
-        self,
-        lang: &mut Middle,
-        ctx: &mut Context,
-    ) -> Result<(Value, Capture), TokenStream> {
+    fn compile(self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
         match self {
-            Atom::Terminal(lit) => {
-                let (value, capture) = match lit {
-                    syn::Lit::Char(c) => ValueData::just(c.value()),
-                    _ => {
-                        Err(quote_spanned! { lit.span() => compile_error!("unsupported literal") })?
-                    }
-                };
-                let value = lang.push_back(value);
-                Ok((value, capture))
+            Atom::Terminal(lit) => match lit {
+                syn::Lit::Char(c) => Ok(Parsing::just(c.value())),
+                _ => Err(quote_spanned! { lit.span() => compile_error!("unsupported literal") })?,
+            },
+            Atom::NonTerminal(name) => {
+                let depends = ctx.depends.get(&name).ok_or_else(|| {
+                    quote_spanned! { name.span() => compile_error!("use of undeclared parser") }
+                })?;
+                let depends = depends.iter().map(|(_, p)| p.clone());
+                Ok(Parsing::call(name, depends))
             }
-            Atom::NonTerminal(id) => {
-                let name = id.to_string();
-                let value = ctx
-                    .symbols
-                    .entry(name)
-                    .or_insert_with(|| {
-                        let value = lang.push_back(ValueData::declare());
-                        Symbol::Decl(value, id)
-                    })
-                    .value();
-                Ok((value, Capture::Loud))
+            Atom::Sub(p) => p.compile(ctx),
+            Atom::Choice(first, rest) => first
+                .compile(ctx)?
+                .choice(rest.into_iter().map(|p| p.compile(ctx))),
+            Atom::Repeat(p) => Ok(p.compile(ctx)?.repeat(0)),
+            Atom::Repeat1(p) => Ok(p.compile(ctx)?.repeat(1)),
+            Atom::Optional(p) => Ok(p.compile(ctx)?.optional()),
+            Atom::LookAhead(p) => Ok(p.compile(ctx)?.look_ahead()),
+            Atom::LookAheadNot(p) => Ok(p.compile(ctx)?.look_ahead_not()),
+        }
+    }
+
+    fn analyze_direct_depends(
+        &self,
+        depends: &mut OrderedMap<syn::Ident, ParserRef>,
+        curr: &syn::Ident,
+    ) {
+        match self {
+            Atom::NonTerminal(name) if name != curr => {
+                depends.insert(name.clone(), ParserRef::new(name));
             }
-            Atom::Sub(p) => p.compile(lang, ctx),
-            Atom::Choice(choices) => {
-                let (choices, capture) =
-                    ValueData::choice(choices.into_iter().map(|p| p.compile(lang, ctx)))?;
-                let value = lang.push_back(choices);
-                Ok((value, capture))
+            Atom::Sub(p) => p.analyze_direct_depends(depends, curr),
+            Atom::Choice(first, rest) => {
+                first.analyze_direct_depends(depends, curr);
+                for p in rest {
+                    p.analyze_direct_depends(depends, curr);
+                }
             }
-            Atom::Repeat(p) => {
-                let (value, capture) = ValueData::repeat(p.compile(lang, ctx)?);
-                let value = lang.push_back(value);
-                Ok((value, capture))
-            }
-            Atom::Repeat1(p) => {
-                let (value, capture) = ValueData::repeat1(p.compile(lang, ctx)?);
-                let value = lang.push_back(value);
-                Ok((value, capture))
-            }
-            Atom::Optional(p) => {
-                let (value, capture) = ValueData::or_not(p.compile(lang, ctx)?);
-                let value = lang.push_back(value);
-                Ok((value, capture))
-            }
-            Atom::LookAhead(p) => {
-                let (value, capture) = ValueData::look_ahead(p.compile(lang, ctx)?.0);
-                let value = lang.push_back(value);
-                Ok((value, capture))
-            }
-            Atom::LookAheadNot(p) => {
-                let (value, capture) = ValueData::look_ahead_not(p.compile(lang, ctx)?.0);
-                let value = lang.push_back(value);
-                Ok((value, capture))
-            }
+            Atom::Repeat(p)
+            | Atom::Repeat1(p)
+            | Atom::Optional(p)
+            | Atom::LookAhead(p)
+            | Atom::LookAheadNot(p) => p.analyze_direct_depends(depends, curr),
+            _ => {}
         }
     }
 
@@ -363,8 +332,9 @@ impl Atom {
                 false
             }
             Atom::Sub(p) => p.must_progress(),
-            Atom::Choice(choices) => choices.iter().all(|p| p.must_progress()),
-
+            Atom::Choice(first, rest) => {
+                first.must_progress() && rest.iter().all(|p| p.must_progress())
+            }
             Atom::Repeat1(p) => p.must_progress(),
         }
     }
@@ -375,7 +345,9 @@ impl Atom {
             Atom::Terminal(_) | Atom::NonTerminal(_) => true,
             Atom::LookAhead(_) | Atom::LookAheadNot(_) => false,
             Atom::Sub(p) => p.may_progress(),
-            Atom::Choice(choices) => choices.iter().any(|p| p.may_progress()),
+            Atom::Choice(first, rest) => {
+                first.may_progress() || rest.iter().any(|p| p.may_progress())
+            }
             Atom::Repeat(p) | Atom::Repeat1(p) | Atom::Optional(p) => p.may_progress(),
         }
     }

@@ -1,17 +1,33 @@
-use std::fmt::Display;
-use std::ops::Index;
-
-use hashlink::linked_hash_map::CursorMut;
 use hashlink::LinkedHashMap;
-use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned, ToTokens};
+use proc_macro2::{Span, TokenStream};
+use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 
-use crate::Hasher;
+use crate::hash::OrderedMap;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct Value(pub u32);
+pub struct Value {
+    pub id: u32,
+    _non_send: std::marker::PhantomData<*const ()>,
+}
 
+impl Value {
+    pub fn next() -> Self {
+        thread_local! {
+            static NEXT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+        }
+        NEXT.with(|next| {
+            let value = next.get();
+            next.set(value + 1);
+            Self {
+                id: value,
+                _non_send: std::marker::PhantomData,
+            }
+        })
+    }
+}
+
+#[derive(Clone)]
 pub enum Capture {
     Loud,
     Slient,
@@ -29,11 +45,19 @@ impl Capture {
         }
     }
 
-    pub fn unify(self, cap: Capture) -> Result<Capture, TokenStream> {
+    pub fn to_anoymous(&self) -> Capture {
+        if self.is_loud() {
+            Capture::Loud
+        } else {
+            Capture::Slient
+        }
+    }
+
+    pub fn unify(self, cap: &Capture) -> Result<Capture, TokenStream> {
         match (self, cap) {
             (Capture::Named(p1, c1), Capture::Named(p2, c2)) => {
-                if p1 == p2 {
-                    if let Ok(c) = c1.unify(*c2) {
+                if &p1 == p2 {
+                    if let Ok(c) = c1.unify(c2) {
                         Ok(Capture::Named(p1, Box::new(c)))
                     } else {
                         Ok(Capture::Named(p1, Box::new(Capture::Loud)))
@@ -45,8 +69,8 @@ impl Capture {
                 }
             }
             (Capture::Tuple(c1, c2), Capture::Tuple(c3, c4)) => {
-                let c1 = c1.unify(*c3)?;
-                let c2 = c2.unify(*c4)?;
+                let c1 = c1.unify(c3)?;
+                let c2 = c2.unify(c4)?;
                 Ok(Capture::Tuple(Box::new(c1), Box::new(c2)))
             }
             (Capture::Loud, _) => Ok(Capture::Loud),
@@ -59,302 +83,277 @@ impl Capture {
     }
 }
 
-pub struct ValueData {
-    kind: ValueKind,
+pub struct Parsing {
+    values: OrderedMap<Value, ParseOp>,
+    pub capture: Capture,
 }
 
-impl ValueData {
-    pub fn kind(&self) -> &ValueKind {
-        &self.kind
+impl Parsing {
+    pub fn into_iter(self) -> impl Iterator<Item = (Value, ParseOp)> {
+        self.values.into_iter()
     }
 
-    pub fn declare() -> Self {
-        Self {
-            kind: ValueKind::Declare,
-        }
+    fn from_op(op: ParseOp, capture: Capture) -> Self {
+        let mut values = LinkedHashMap::default();
+        values.insert(Value::next(), op);
+        Self { values, capture }
     }
 
-    pub fn define(decl: Value, value: Value) -> Self {
-        Self {
-            kind: ValueKind::Define { decl, value },
-        }
+    pub fn result(&self) -> Value {
+        self.values
+            .back()
+            .map(|(k, _)| *k)
+            .expect("parser is empty")
     }
 
-    pub fn just(c: char) -> (Self, Capture) {
-        let just = Self {
-            kind: ValueKind::Just(c),
+    fn push(mut self, op: ParseOp) -> Self {
+        self.values.insert(Value::next(), op);
+        self
+    }
+
+    pub fn just(c: char) -> Self {
+        Self::from_op(ParseOp::Just(c), Capture::Slient)
+    }
+
+    pub fn call(name: syn::Ident, depends: impl Iterator<Item = ParserRef>) -> Self {
+        Self::from_op(
+            ParseOp::Call {
+                parser: ParserRef::new(&name),
+                depends: depends.collect(),
+            },
+            Capture::Loud,
+        )
+    }
+
+    pub fn map(self, f: syn::Expr) -> Self {
+        let parser = self.result();
+        let capture = self.capture.clone();
+        self.push(ParseOp::Map {
+            parser,
+            cap: capture,
+            expr: f,
+        })
+    }
+
+    pub fn then(mut self, next: Box<Parsing>) -> Self {
+        let prev = self.result();
+        let op = match (self.capture.is_loud(), next.capture.is_loud()) {
+            (true, false) => ParseOp::ThenIgnore { prev, next },
+            (false, true) => {
+                self.capture = next.capture.clone();
+                ParseOp::IgnoreThen { prev, next }
+            }
+            _ => {
+                self.capture =
+                    Capture::Tuple(Box::new(self.capture), Box::new(next.capture.clone()));
+                ParseOp::Then { prev, next }
+            }
         };
-        (just, Capture::Slient)
+        self.push(op)
     }
 
-    pub fn map(v: Value, c: Capture, t: syn::Type, e: syn::Expr) -> Self {
-        Self {
-            kind: ValueKind::Map(v, c, t, e),
-        }
-    }
-
-    pub fn then((v1, cap1): (Value, Capture), (v2, cap2): (Value, Capture)) -> (Self, Capture) {
-        let loud1 = cap1.is_loud();
-        let loud2 = cap2.is_loud();
-        if loud1 && !loud2 {
-            let kind = ValueKind::ThenIgnore(v1, v2);
-            return (Self { kind }, cap1);
-        }
-        if !loud1 && loud2 {
-            let kind = ValueKind::IgnoreThen(v1, v2);
-            return (Self { kind }, cap2);
-        }
-
-        let then = Self {
-            kind: ValueKind::Then(v1, v2),
-        };
-        (then, Capture::Tuple(Box::new(cap1), Box::new(cap2)))
-    }
-
-    /// # Panics
-    /// Panics if the input vector is empty.
     pub fn choice(
-        mut vs: impl Iterator<Item = Result<(Value, Capture), TokenStream>>,
-    ) -> Result<(Self, Capture), TokenStream> {
-        let (v, cap) = vs.next().unwrap()?;
-        let mut acc = vec![v];
-        let mut u = cap;
+        mut self,
+        rest: impl Iterator<Item = Result<Parsing, TokenStream>>,
+    ) -> Result<Self, TokenStream> {
+        let first = self.result();
+        let mut parsers = vec![];
 
-        for v in vs {
-            let (v, c) = v?;
-            u = c.unify(u)?;
-            acc.push(v);
+        for item in rest {
+            let parser = item?;
+            self.capture = self.capture.unify(&parser.capture)?;
+            parsers.push(parser);
         }
 
-        let kind = ValueKind::Choice(acc);
-        Ok((Self { kind }, u))
-    }
-
-    pub fn choice_nocap(vs: Vec<Value>) -> Self {
-        Self {
-            kind: ValueKind::Choice(vs),
-        }
-    }
-
-    pub fn memorize(v: Value, leftrec: bool) -> Self {
-        if leftrec {
-            Self {
-                kind: ValueKind::LeftRec(v),
-            }
-        } else {
-            Self {
-                kind: ValueKind::Memorize(v),
-            }
-        }
-    }
-
-    pub fn repeat((v, cap): (Value, Capture)) -> (Self, Capture) {
-        let kind = ValueKind::Repeat(v);
-        let cap = if cap.is_loud() {
-            Capture::Loud
-        } else {
-            Capture::Slient
+        let op = ParseOp::Choice {
+            parsers: (first, parsers),
         };
-        (Self { kind }, cap)
+
+        Ok(self.push(op))
     }
 
-    pub fn repeat1((v, cap): (Value, Capture)) -> (Self, Capture) {
-        let kind = ValueKind::Repeat1(v);
-        let cap = if cap.is_loud() {
-            Capture::Loud
-        } else {
-            Capture::Slient
+    pub fn choice_nocap(
+        self,
+        rest: impl Iterator<Item = Result<Parsing, TokenStream>>,
+    ) -> Result<Self, TokenStream> {
+        let first = self.result();
+        let parsers = (first, rest.collect::<Result<_, _>>()?);
+        Ok(self.push(ParseOp::Choice { parsers }))
+    }
+
+    fn recovery(self, capture: Capture) -> Self {
+        let op = ParseOp::Recovery {
+            parser: Box::new(self),
         };
-        (Self { kind }, cap)
+        Self::from_op(op, capture)
     }
 
-    pub fn or_not((v, cap): (Value, Capture)) -> (Self, Capture) {
-        let kind = ValueKind::OrNot(v);
-        let cap = if cap.is_loud() {
-            Capture::Loud
-        } else {
-            Capture::Slient
-        };
-        (Self { kind }, cap)
+    pub fn repeat(self, at_least: usize) -> Self {
+        let cap = self.capture.to_anoymous();
+        let parser = Box::new(self);
+        Self::from_op(ParseOp::Repeat { parser, at_least }, cap.clone()).recovery(cap)
     }
 
-    pub fn look_ahead(v: Value) -> (Self, Capture) {
-        let kind = ValueKind::LookAhead(v);
-        (Self { kind }, Capture::Slient)
+    pub fn optional(self) -> Self {
+        let cap = self.capture.to_anoymous();
+        let parser = Box::new(self);
+        Self::from_op(ParseOp::Optional { parser }, cap.clone()).recovery(cap)
     }
 
-    pub fn look_ahead_not(v: Value) -> (Self, Capture) {
-        let kind = ValueKind::LookAheadNot(v);
-        (Self { kind }, Capture::Slient)
+    pub fn look_ahead(self) -> Self {
+        let parser = self.result();
+        self.push(ParseOp::Ignore { parser })
+            .recovery(Capture::Slient)
+    }
+
+    pub fn look_ahead_not(self) -> Self {
+        let parser = self.result();
+        self.push(ParseOp::Not { parser }).recovery(Capture::Slient)
     }
 }
 
-/// IR should be type-ignorant
-///
-/// ```text
-/// Declare : ref Parser (+)
-/// Define : ref Parser _ -> Parser _ -> ()
-/// Just : char -> Parser (-)
-/// Noise : exists n, Parser _ -> Parser n
-/// Map : Parser n -> Expr -> Parser (+)
-/// Then : Parser m -> Parser n -> Parser (m, n)
-/// ThenIgnore : Parser m -> Parser _ -> Parser m
-/// IgnoreThen : Parser _ -> Parser n -> Parser n
-/// Choice : [Parser n] -> Parser n
-/// Repeat : Parser n -> Parser (+)
-/// Repeat1 : Parser n -> Parser (+)
-/// OrNot : Parser n -> Parser (+)
-///
-///
-/// ```
-pub enum ValueKind {
-    Declare,
-    Define { decl: Value, value: Value },
+pub enum ParseOp {
+    /// ```
+    /// {state}.char({0})
+    /// ```
     Just(char),
-    Map(Value, Capture, syn::Type, syn::Expr),
-    Memorize(Value),
-    LeftRec(Value),
-
-    Then(Value, Value),
-    ThenIgnore(Value, Value),
-    IgnoreThen(Value, Value),
-    Choice(Vec<Value>),
-    Repeat(Value),
-    Repeat1(Value),
-    OrNot(Value),
-    LookAhead(Value),
-    LookAheadNot(Value),
+    /// ```
+    /// {parser}.parse_memo({state}, {..depends})
+    /// ```
+    Call {
+        parser: ParserRef,
+        depends: Vec<ParserRef>,
+    },
+    /// ```
+    /// {parser}.map(|{cap}| {f})
+    /// ```
+    Map {
+        parser: Value,
+        cap: Capture,
+        expr: syn::Expr,
+    },
+    /// ```
+    /// match {prev} {
+    ///     Ok(v1) => {next}.map(|v2| (v1, v2)),
+    ///     Err(e) => Err(e),
+    /// }
+    /// ```
+    Then { prev: Value, next: Box<Parsing> },
+    /// ```
+    /// match {prev} {
+    ///     Ok(v1) => {next}.map(|_| v1),
+    ///     Err(e) => Err(e),
+    /// }
+    /// ```
+    ThenIgnore { prev: Value, next: Box<Parsing> },
+    /// ```
+    /// match {prev} {
+    ///     Ok(_) => {next},
+    ///     Err(e) => Err(e),
+    /// }
+    /// ```
+    IgnoreThen { prev: Value, next: Box<Parsing> },
+    /// ```
+    /// let mut results = vec![];
+    /// while let Ok(value) = {parser} {
+    ///     results.push(value);
+    /// }
+    /// if results.len() >= {at_least} {
+    ///     Ok(results)
+    /// } else {
+    ///     Err(state.error())
+    /// }
+    /// ```
+    Repeat {
+        parser: Box<Parsing>,
+        at_least: usize,
+    },
+    /// ```
+    /// {parser}.ok()
+    /// ```
+    Optional { parser: Box<Parsing> },
+    /// ```
+    /// let fork = {state}.fork();
+    /// {push_state(&fork)}
+    /// let value = {parser};
+    /// {pop_state(&fork)}
+    /// value.inspect(|_| {state}.advance_to(&fork))
+    /// ```
+    Recovery { parser: Box<Parsing> },
+    /// ```
+    /// {parser}.map(|_| ())
+    /// ```
+    Ignore { parser: Value },
+    /// ```
+    /// if let Ok(value) = {parser} {
+    ///     Err(state.error())
+    /// } else {
+    ///     Ok(())
+    /// }
+    /// ```
+    Not { parser: Value },
+    /// ```
+    /// if let Ok(value) = {parser.0} {
+    ///     Ok(value)
+    /// } else if let Ok(value) = {parser.1[0]} {
+    ///     Ok(value)
+    /// } else if let Ok(value) = {parser.1[1]} {
+    ///     Ok(value)
+    /// } ... else {
+    ///     Err(state.error())
+    /// }
+    /// ```
+    Choice { parsers: (Value, Vec<Parsing>) },
 }
 
-impl ValueKind {
-    pub fn uses(&self) -> Vec<Value> {
-        match self {
-            ValueKind::Declare => vec![],
-            ValueKind::Define { decl, value } => vec![*decl, *value],
-            ValueKind::Just(_) => vec![],
-            ValueKind::Map(v, _, _, _) => vec![*v],
-            ValueKind::Memorize(v) => vec![*v],
-            ValueKind::LeftRec(v) => vec![*v],
-            ValueKind::Then(v1, v2) => vec![*v1, *v2],
-            ValueKind::ThenIgnore(v1, v2) => vec![*v1, *v2],
-            ValueKind::IgnoreThen(v1, v2) => vec![*v1, *v2],
-            ValueKind::Choice(vs) => vs.clone(),
-            ValueKind::Repeat(v) => vec![*v],
-            ValueKind::Repeat1(v) => vec![*v],
-            ValueKind::OrNot(v) => vec![*v],
-            ValueKind::LookAhead(v) => vec![*v],
-            ValueKind::LookAheadNot(v) => vec![*v],
-        }
+pub enum MemoKind {
+    None,
+    Memorize,
+    LeftRec,
+}
+
+pub struct ParserImpl {
+    pub name: syn::Ident,
+    pub curr: ParserRef,
+    pub parser: Parsing,
+    pub memo: MemoKind,
+    pub ret_ty: syn::Type,
+    pub depends: Vec<(ParserRef, syn::Ident)>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ParserRef(syn::Ident);
+
+impl ParserRef {
+    pub fn new(name: &syn::Ident) -> Self {
+        Self(format_ident!(
+            "__parser_{}",
+            name,
+            span = Span::mixed_site()
+        ))
+    }
+
+    pub fn curr() -> Self {
+        Self(format_ident!("self"))
+    }
+
+    pub fn as_ident(&self) -> &syn::Ident {
+        &self.0
     }
 }
 
-/// Middle representation of the parser.
-#[derive(Default)]
 pub struct Middle {
-    next_value: u32,
-    values: LinkedHashMap<Value, ValueData, Hasher>,
-    pub results: Vec<Value>,
+    pub crate_name: TokenStream,
+    pub parsers: Vec<ParserImpl>,
+    pub results: Vec<syn::Ident>,
 }
 
 impl Middle {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn push_back(&mut self, data: ValueData) -> Value {
-        let value = Value(self.next_value);
-        self.next_value += 1;
-
-        self.values.insert(value, data);
-        value
-    }
-
-    pub fn value(&self, value: Value) -> Option<&ValueData> {
-        self.values.get(&value)
-    }
-
-    pub fn values(&self) -> impl Iterator<Item = (&Value, &ValueData)> {
-        self.values.iter()
-    }
-
-    pub fn cursor_front_mut(&mut self) -> CursorMut<Value, ValueData, Hasher> {
-        self.values.cursor_front_mut()
-    }
-
-    pub fn cursor_back_mut(&mut self) -> CursorMut<Value, ValueData, Hasher> {
-        self.values.cursor_back_mut()
-    }
-
-    pub fn debug(self) -> MiddleDebug {
-        MiddleDebug(self)
-    }
-
-    pub fn debug_with(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (value, data) in self.values.iter() {
-            match &data.kind {
-                ValueKind::Declare => writeln!(fmt, "#{} = Declare", value.0)?,
-                ValueKind::Define { decl, value } => {
-                    writeln!(fmt, "Define #{} = #{}", decl.0, value.0)?
-                }
-                ValueKind::Just(c) => writeln!(fmt, "#{} = Just '{}'", value.0, c)?,
-                ValueKind::Map(v, _, _, e) => {
-                    writeln!(fmt, "#{} = Map #{} {}", value.0, v.0, e.to_token_stream())?
-                }
-                ValueKind::Memorize(v) => writeln!(fmt, "#{} = Memorize #{}", value.0, v.0)?,
-                ValueKind::LeftRec(v) => writeln!(fmt, "#{} = LeftRec #{}", value.0, v.0)?,
-                ValueKind::Then(v1, v2) => {
-                    writeln!(fmt, "#{} = Then #{} #{}", value.0, v1.0, v2.0)?
-                }
-                ValueKind::ThenIgnore(v1, v2) => {
-                    writeln!(fmt, "#{} = ThenIgnore #{}, #{}", value.0, v1.0, v2.0)?
-                }
-                ValueKind::IgnoreThen(v1, v2) => {
-                    writeln!(fmt, "#{} = IgnoreThen #{}, #{}", value.0, v1.0, v2.0)?
-                }
-                ValueKind::Choice(vs) => {
-                    write!(fmt, "#{} = Choice [", value.0)?;
-                    for v in vs.iter() {
-                        write!(fmt, "#{} ", v.0)?;
-                    }
-                    writeln!(fmt, "]")?
-                }
-                ValueKind::Repeat(v) => writeln!(fmt, "#{} = Repeat #{}", value.0, v.0)?,
-                ValueKind::Repeat1(v) => writeln!(fmt, "#{} = Repeat1 #{}", value.0, v.0)?,
-                ValueKind::OrNot(v) => writeln!(fmt, "#{} = OrNot #{}", value.0, v.0)?,
-                ValueKind::LookAhead(v) => writeln!(fmt, "#{} = LookAhead #{}", value.0, v.0)?,
-                ValueKind::LookAheadNot(v) => {
-                    writeln!(fmt, "#{} = LookAheadNot #{}", value.0, v.0)?
-                }
-            }
+    pub fn new(crate_name: TokenStream) -> Self {
+        Self {
+            crate_name,
+            parsers: vec![],
+            results: vec![],
         }
-        if self.results.len() == 1 {
-            writeln!(fmt, "Return #{}", self.results[0].0)?
-        } else {
-            write!(fmt, "Return (")?;
-            for (i, v) in self.results.iter().enumerate() {
-                write!(fmt, "#{}", v.0)?;
-                if i != self.results.len() - 1 {
-                    write!(fmt, ", ")?;
-                }
-            }
-            writeln!(fmt, ")")?
-        }
-        Ok(())
-    }
-}
-
-impl Index<Value> for Middle {
-    type Output = ValueData;
-
-    fn index(&self, index: Value) -> &Self::Output {
-        self.values.get(&index).unwrap()
-    }
-}
-
-pub struct MiddleDebug(pub Middle);
-
-impl Display for MiddleDebug {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.debug_with(f)
     }
 }

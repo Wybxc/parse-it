@@ -1,5 +1,7 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+
+use rustc_hash::FxHashMap as HashMap;
 
 #[derive(Clone, Copy)]
 pub struct Token<K> {
@@ -76,6 +78,20 @@ impl<K: Copy> ParserState<K> {
         }
     }
 
+    pub fn parse(&self, token: K) -> Result<K, Error>
+    where
+        K: Eq,
+    {
+        match self.next() {
+            Some(Token { kind, .. }) if kind == token => Ok(kind),
+            _ => Err(self.error()),
+        }
+    }
+
+    pub fn error(&self) -> Error {
+        Error::new(self.span())
+    }
+
     pub fn is_empty(&self) -> bool {
         self.pos.get().0 >= self.items.len()
     }
@@ -101,6 +117,77 @@ impl<K: Copy> ParserState<K> {
         Self {
             pos: self.pos.clone(),
             items: self.items.clone(),
+        }
+    }
+}
+
+pub struct Memo<T: Clone> {
+    map: RefCell<HashMap<Position, (T, Position)>>,
+}
+
+impl<T: Clone> Default for Memo<T> {
+    fn default() -> Self {
+        Self {
+            map: RefCell::new(HashMap::default()),
+        }
+    }
+}
+
+impl<T: Clone> Memo<T> {
+    pub fn get(&self, pos: &Position) -> Option<(T, Position)> {
+        self.map.borrow().get(pos).cloned()
+    }
+
+    pub fn insert(&self, pos: Position, value: (T, Position)) {
+        self.map.borrow_mut().insert(pos, value);
+    }
+}
+
+#[inline]
+pub fn memorize<K: Copy, T: Clone>(
+    state: &ParserState<K>,
+    memo: &Memo<T>,
+    parser: impl FnOnce(&ParserState<K>) -> Result<T, Error>,
+) -> Result<T, Error> {
+    let pos = state.pos();
+    if let Some((value, end)) = memo.get(&pos) {
+        state.advance_to_pos(end);
+        Ok(value.clone())
+    } else {
+        let value = parser(state)?;
+        let end = state.pos();
+        memo.insert(pos, (value.clone(), end));
+        Ok(value)
+    }
+}
+
+#[inline]
+pub fn left_rec<K: Copy, T: Clone>(
+    state: &ParserState<K>,
+    memo: &Memo<Option<T>>,
+    mut parser: impl FnMut(&ParserState<K>) -> Result<T, Error>,
+) -> Result<T, Error> {
+    let pos = state.pos();
+    if let Some((value, end)) = memo.get(&pos) {
+        if let Some(value) = value {
+            state.advance_to_pos(end);
+            Ok(value.clone())
+        } else {
+            Err(state.error())
+        }
+    } else {
+        memo.insert(pos, (None, pos));
+        let mut last = (None, pos);
+        loop {
+            let fork = state.fork();
+            let value = parser(&fork)?;
+            let end = fork.pos();
+            if end <= last.1 {
+                state.advance_to_pos(end);
+                break last.0.ok_or_else(|| state.error());
+            }
+            last = (Some(value), end);
+            memo.insert(pos, last.clone());
         }
     }
 }

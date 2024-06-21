@@ -1,17 +1,24 @@
 #[derive(Debug)]
 pub struct ParseIt {
+    pub crate_name: Option<syn::Path>,
     pub parsers: Vec<Parser>,
     pub results: Vec<syn::Ident>,
 }
 
 /// ```text
-/// Parser ::= Name '->' Type '{' Rule* '}'
+/// Parser ::= Name '->' Type '{' Rule+ '}'
 /// ```
 #[derive(Debug)]
 pub struct Parser {
     pub name: syn::Ident,
     pub ty: syn::Type,
-    pub rules: Vec<Rule>,
+    pub rules: (Rule, Vec<Rule>),
+}
+
+impl Parser {
+    pub fn rules(&self) -> impl Iterator<Item = &Rule> {
+        std::iter::once(&self.rules.0).chain(self.rules.1.iter())
+    }
 }
 
 /// ```text
@@ -37,6 +44,12 @@ pub struct Production {
     pub parts: (Part, Vec<Part>),
 }
 
+impl Production {
+    pub fn parts(&self) -> impl Iterator<Item = &Part> {
+        std::iter::once(&self.parts.0).chain(self.parts.1.iter())
+    }
+}
+
 #[derive(Debug)]
 pub struct Part {
     pub capture: Capture,
@@ -55,7 +68,7 @@ pub enum Atom {
     Terminal(syn::Lit),
     NonTerminal(syn::Ident),
     Sub(Box<Production>),
-    Choice(Vec<Production>),
+    Choice(Box<Production>, Vec<Production>),
     Repeat(Box<Atom>),
     Repeat1(Box<Atom>),
     Optional(Box<Atom>),

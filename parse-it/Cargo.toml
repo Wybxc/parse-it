@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 parse-it-macros = { path = "../parse-it-macros" }
-ahash = { workspace = true }
+rustc-hash = { workspace = true }
 typle = "0.10.3"
