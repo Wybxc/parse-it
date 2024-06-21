@@ -105,7 +105,7 @@ impl ParserImpl {
         let state = state_token.to_ident();
         let parser = self.parser.expand(state_token)?;
         let parse_impl = quote! {
-            pub fn parse_impl(
+            fn parse_impl(
                 &self,
                 #state: &#crate_name::ParserState<char>,
                 #depends_decl
@@ -131,12 +131,15 @@ impl ParserImpl {
             }
         };
         let parse_memo = quote! {
-            pub fn parse_memo(
+            fn parse_memo(
                 &self,
                 #state: &#crate_name::ParserState<char>,
                 #depends_decl
             ) -> Result<#ret_ty, ::parse_it::Error> {
-                #memo_func
+                #state.push(Self::NAME);
+                let result = #memo_func;
+                #state.pop();
+                result
             }
         };
 
@@ -151,19 +154,23 @@ impl ParserImpl {
 
                 fn parse_stream(&self, state: &#crate_name::ParserState<char>) -> Result<#ret_ty, ::parse_it::Error> {
                     #(#depends_def)*
-                    self.parse_memo(state, #(#depends_use),*)
+                    let result = self.parse_memo(state, #(#depends_use),*);
+                    result
                 }
             }
         };
 
+        let name_str = name.to_string();
         let vis = self.vis;
         Ok(quote! {
-            #[derive(Default)]
+            #[derive(Debug, Default)]
             #vis struct #name {
                 #memo_decl
             }
 
             impl #name {
+                const NAME: &'static str = #name_str;
+
                 #parse_impl
                 #parse_memo
             }
@@ -223,40 +230,52 @@ impl Parsing {
                     }
                 }
                 ParseOp::Repeat { parser, at_least } => {
-                    let parser = parser.expand(state_token)?;
-                    quote! {
+                    let fork_token = state_token.fork();
+                    let fork = fork_token.to_ident();
+                    let parser = parser.expand(fork_token)?;
+                    let repeat = quote! {
+                        let #fork = &#state.fork();
                         let mut results = vec![];
                         while let Ok(value) = #parser {
+                            #state.advance_to(&#fork);
                             results.push(value);
                         }
-                        let #value = if results.len() >= #at_least {
-                            Ok(results)
-                        } else {
-                            Err(#state.error())
-                        };
+                    };
+                    if at_least == 0 {
+                        quote! {
+                            #repeat
+                            let #value = Ok(results);
+                        }
+                    } else {
+                        quote! {
+                            #repeat
+                            let #value = if results.len() >= #at_least {
+                                Ok(results)
+                            } else {
+                                Err(#state.error())
+                            };
+                        }
                     }
                 }
                 ParseOp::Optional { parser } => {
                     let parser = parser.expand(state_token)?;
                     quote! { let #value = #parser.ok(); }
                 }
-                ParseOp::Recovery { parser } => {
+                ParseOp::LookAhead { parser } => {
                     let fork_token = state_token.fork();
                     let fork = fork_token.to_ident();
                     let parser = parser.expand(fork_token)?;
                     quote! {
                         let #fork = &#state.fork();
-                        let value = #parser;
-                        let #value = value.inspect(|_| #state.advance_to(&#fork));
+                        let #value = #parser.map(|_| ());
                     }
                 }
-                ParseOp::Ignore { parser } => {
-                    let parser = parser.to_ident();
-                    quote! { let #value = #parser.map(|_| ()); }
-                }
-                ParseOp::Not { parser } => {
-                    let parser = parser.to_ident();
+                ParseOp::LookAheadNot { parser } => {
+                    let fork_token = state_token.fork();
+                    let fork = fork_token.to_ident();
+                    let parser = parser.expand(fork_token)?;
                     quote! {
+                        let #fork = &#state.fork();
                         let #value = if let Ok(value) = #parser {
                             Err(#state.error())
                         } else {
@@ -265,20 +284,23 @@ impl Parsing {
                     }
                 }
                 ParseOp::Choice { parsers } => {
-                    let first = parsers.0.to_ident();
-                    let rest = parsers
-                        .1
+                    let fork_token = state_token.fork();
+                    let fork = fork_token.to_ident();
+                    let parsers = parsers
                         .into_iter()
-                        .map(|p| p.expand(state_token))
+                        .map(|p| p.expand(fork_token))
                         .collect::<Result<Vec<_>, _>>()?;
                     quote! {
-                        let #value = if let Ok(value) = #first {
+                        let mut fork;
+                        let mut #fork;
+                        let #value = #(if let Ok(value) = {
+                            fork = #state.fork();
+                            #fork = &fork;
+                            #parsers
+                        } {
+                            #state.advance_to(#fork);
                             Ok(value)
-                        } #(
-                            else if let Ok(value) = #rest {
-                                Ok(value)
-                            }
-                        )* else {
+                        } else)*{
                             Err(#state.error())
                         };
                     }

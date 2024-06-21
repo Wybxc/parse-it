@@ -153,62 +153,60 @@ impl Parsing {
     }
 
     pub fn choice(
-        mut self,
+        self,
         rest: impl Iterator<Item = Result<Parsing, TokenStream>>,
     ) -> Result<Self, TokenStream> {
-        let first = self.result();
-        let mut parsers = vec![];
+        let mut capture = self.capture.clone();
+        let mut parsers = vec![self];
 
         for item in rest {
             let parser = item?;
-            self.capture = self.capture.unify(&parser.capture)?;
+            capture = capture.unify(&parser.capture)?;
             parsers.push(parser);
         }
 
-        let op = ParseOp::Choice {
-            parsers: (first, parsers),
-        };
-
-        Ok(self.push(op))
+        let op = ParseOp::Choice { parsers };
+        Ok(Self::from_op(op, capture))
     }
 
     pub fn choice_nocap(
         self,
         rest: impl Iterator<Item = Result<Parsing, TokenStream>>,
     ) -> Result<Self, TokenStream> {
-        let first = self.result();
-        let parsers = (first, rest.collect::<Result<_, _>>()?);
-        Ok(self.push(ParseOp::Choice { parsers }))
-    }
-
-    fn recovery(self, capture: Capture) -> Self {
-        let op = ParseOp::Recovery {
-            parser: Box::new(self),
-        };
-        Self::from_op(op, capture)
+        let parsers = std::iter::once(Ok(self)).chain(rest);
+        let parsers = parsers.collect::<Result<Vec<_>, _>>()?;
+        let op = ParseOp::Choice { parsers };
+        Ok(Self::from_op(op, Capture::Loud))
     }
 
     pub fn repeat(self, at_least: usize) -> Self {
         let cap = self.capture.to_anoymous();
         let parser = Box::new(self);
-        Self::from_op(ParseOp::Repeat { parser, at_least }, cap.clone()).recovery(cap)
+        Self::from_op(ParseOp::Repeat { parser, at_least }, cap)
     }
 
     pub fn optional(self) -> Self {
         let cap = self.capture.to_anoymous();
         let parser = Box::new(self);
-        Self::from_op(ParseOp::Optional { parser }, cap.clone()).recovery(cap)
+        Self::from_op(ParseOp::Optional { parser }, cap)
     }
 
     pub fn look_ahead(self) -> Self {
-        let parser = self.result();
-        self.push(ParseOp::Ignore { parser })
-            .recovery(Capture::Slient)
+        Self::from_op(
+            ParseOp::LookAhead {
+                parser: Box::new(self),
+            },
+            Capture::Slient,
+        )
     }
 
     pub fn look_ahead_not(self) -> Self {
-        let parser = self.result();
-        self.push(ParseOp::Not { parser }).recovery(Capture::Slient)
+        Self::from_op(
+            ParseOp::LookAheadNot {
+                parser: Box::new(self),
+            },
+            Capture::Slient,
+        )
     }
 }
 
@@ -254,8 +252,10 @@ pub enum ParseOp {
     /// ```
     IgnoreThen { prev: Value, next: Box<Parsing> },
     /// ```
+    /// let fork = &{state}.fork();    
     /// let mut results = vec![];
-    /// while let Ok(value) = {parser} {
+    /// while let Ok(value) = {parser/fork} {
+    ///     {state}.advance_to(fork);
     ///     results.push(value);
     /// }
     /// if results.len() >= {at_least} {
@@ -273,37 +273,35 @@ pub enum ParseOp {
     /// ```
     Optional { parser: Box<Parsing> },
     /// ```
-    /// let fork = {state}.fork();
-    /// {push_state(&fork)}
-    /// let value = {parser};
-    /// {pop_state(&fork)}
-    /// value.inspect(|_| {state}.advance_to(&fork))
+    /// let fork = &{state}.fork();
+    /// {parser/fork}.map(|_| ())
     /// ```
-    Recovery { parser: Box<Parsing> },
+    LookAhead { parser: Box<Parsing> },
     /// ```
-    /// {parser}.map(|_| ())
-    /// ```
-    Ignore { parser: Value },
-    /// ```
-    /// if let Ok(value) = {parser} {
+    /// let fork = &{state}.fork();
+    /// if let Ok(value) = {parser/fork} {
     ///     Err(state.error())
     /// } else {
     ///     Ok(())
     /// }
     /// ```
-    Not { parser: Value },
+    LookAheadNot { parser: Box<Parsing> },
     /// ```
-    /// if let Ok(value) = {parser.0} {
+    /// let mut fork = &{state}.fork();
+    /// if let Ok(value) = {parser[0]/fork} {
+    ///     {state}.advance_to(fork);
     ///     Ok(value)
-    /// } else if let Ok(value) = {parser.1[0]} {
-    ///     Ok(value)
-    /// } else if let Ok(value) = {parser.1[1]} {
+    /// } else if let Ok(value) = {
+    ///     fork = &{state}.fork();
+    ///     {parser[1]/fork}
+    /// } {
+    ///     {state}.advance_to(fork);
     ///     Ok(value)
     /// } ... else {
     ///     Err(state.error())
     /// }
     /// ```
-    Choice { parsers: (Value, Vec<Parsing>) },
+    Choice { parsers: Vec<Parsing> },
 }
 
 pub enum MemoKind {

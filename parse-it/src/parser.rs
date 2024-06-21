@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use rustc_hash::FxHashMap as HashMap;
@@ -34,7 +35,7 @@ impl Error {
 /// A opaque wrapper around a position in a sequence of tokens.
 ///
 /// The position means the index of token in the sequence.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Position(usize);
 
 impl Position {
@@ -46,6 +47,7 @@ impl Position {
 pub struct ParserState<K> {
     pos: Cell<Position>,
     items: Rc<Vec<Token<K>>>,
+    stack: Rc<RefCell<Vec<(&'static str, Position)>>>,
 }
 
 impl<K: Copy> ParserState<K> {
@@ -53,6 +55,7 @@ impl<K: Copy> ParserState<K> {
         Self {
             pos: Cell::new(Position(0)),
             items: Rc::new(items),
+            stack: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -80,7 +83,7 @@ impl<K: Copy> ParserState<K> {
 
     pub fn parse(&self, token: K) -> Result<K, Error>
     where
-        K: Eq,
+        K: Eq + std::fmt::Debug,
     {
         match self.next() {
             Some(Token { kind, .. }) if kind == token => Ok(kind),
@@ -117,7 +120,20 @@ impl<K: Copy> ParserState<K> {
         Self {
             pos: self.pos.clone(),
             items: self.items.clone(),
+            stack: self.stack.clone(),
         }
+    }
+
+    pub fn push(&self, name: &'static str) {
+        self.stack.borrow_mut().push((name, self.pos()));
+    }
+
+    pub fn pop(&self) {
+        self.stack.borrow_mut().pop();
+    }
+
+    pub fn debug_stack(&self) -> String {
+        format!("{:?}", self.stack.borrow())
     }
 }
 
@@ -130,6 +146,12 @@ impl<T: Clone> Default for Memo<T> {
         Self {
             map: RefCell::new(HashMap::default()),
         }
+    }
+}
+
+impl<T: Clone + Debug> Debug for Memo<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.map.borrow().fmt(f)
     }
 }
 
@@ -169,8 +191,8 @@ pub fn left_rec<K: Copy, T: Clone>(
 ) -> Result<T, Error> {
     let pos = state.pos();
     if let Some((value, end)) = memo.get(&pos) {
+        state.advance_to_pos(end);
         if let Some(value) = value {
-            state.advance_to_pos(end);
             Ok(value.clone())
         } else {
             Err(state.error())
@@ -180,14 +202,15 @@ pub fn left_rec<K: Copy, T: Clone>(
         let mut last = (None, pos);
         loop {
             let fork = state.fork();
-            let value = parser(&fork)?;
+            let Ok(value) = parser(&fork) else { break };
             let end = fork.pos();
             if end <= last.1 {
-                state.advance_to_pos(end);
-                break last.0.ok_or_else(|| state.error());
+                break;
             }
             last = (Some(value), end);
             memo.insert(pos, last.clone());
         }
+        state.advance_to_pos(last.1);
+        last.0.ok_or_else(|| state.error())
     }
 }
