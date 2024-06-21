@@ -54,7 +54,13 @@ impl ParseIt {
             Some(crate_name) => quote! { #crate_name },
             None => quote! { ::parse_it },
         };
-        let mut middle = Middle::new(crate_name, self.mod_name);
+        let mut middle = Middle {
+            attrs: self.attrs,
+            crate_name,
+            mod_name: self.mod_name,
+            items: self.items,
+            parsers: vec![],
+        };
         for parser in self.parsers {
             let parser = parser.compile(&mut ctx)?;
             middle.parsers.push(parser);

@@ -1,8 +1,62 @@
+use syn::{parse::discouraged::Speculative, Token};
+
 #[derive(Debug)]
 pub struct ParseIt {
+    pub attrs: Vec<syn::Attribute>,
     pub crate_name: Option<syn::Path>,
     pub mod_name: syn::Ident,
+    pub items: Vec<syn::Item>,
     pub parsers: Vec<Parser>,
+}
+
+impl syn::parse::Parse for ParseIt {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut crate_name = None;
+        let mut attrs = vec![];
+        for attr in input.call(syn::Attribute::parse_outer)? {
+            if attr.path().is_ident("parse_it") {
+                attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("crate") {
+                        let value = meta.value()?;
+                        let value = value.parse::<syn::LitStr>()?;
+                        crate_name = Some(value.parse().map_err(|_| {
+                            syn::Error::new_spanned(value, "expected a valid path")
+                        })?);
+                    } else {
+                        Err(syn::Error::new_spanned(meta.path, "unknown attribute"))?
+                    }
+                    Ok(())
+                })?;
+            } else {
+                attrs.push(attr);
+            }
+        }
+
+        input.parse::<Token![mod]>()?;
+        let mod_name = input.parse::<syn::Ident>()?;
+
+        let content;
+        syn::braced!(content in input);
+        let mut parsers = vec![];
+        let mut items = vec![];
+        while !content.is_empty() {
+            let fork = content.fork();
+            if let Ok(parser) = fork.parse::<Parser>() {
+                content.advance_to(&fork);
+                parsers.push(parser);
+            } else {
+                let item = content.parse::<syn::Item>()?;
+                items.push(item);
+            }
+        }
+        Ok(ParseIt {
+            attrs,
+            crate_name,
+            items,
+            mod_name,
+            parsers,
+        })
+    }
 }
 
 /// ```text
@@ -22,6 +76,33 @@ impl Parser {
     }
 }
 
+impl syn::parse::Parse for Parser {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let vis = input.parse::<syn::Visibility>()?;
+        let name = input.parse::<syn::Ident>()?;
+        input.parse::<Token![->]>()?;
+        let ty = input.parse::<syn::Type>()?;
+
+        let content;
+        syn::braced!(content in input);
+
+        let first_rule = content.parse::<Rule>()?;
+        let mut rules = vec![];
+        while !content.is_empty() {
+            let rule = content.parse::<Rule>()?;
+            rules.push(rule);
+        }
+        let rules = (first_rule, rules);
+
+        Ok(Parser {
+            vis,
+            name,
+            ty,
+            rules,
+        })
+    }
+}
+
 /// ```text
 /// Rule ::= Production '=>' Expr
 /// ```
@@ -31,13 +112,20 @@ pub struct Rule {
     pub action: syn::Expr,
 }
 
+impl syn::parse::Parse for Rule {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let production = input.parse::<Production>()?;
+        input.parse::<Token![=>]>()?;
+        let action = input.parse::<syn::Expr>()?;
+        if (requires_comma_to_be_match_arm(&action) && !input.is_empty()) || input.peek(Token![,]) {
+            input.parse::<Token![,]>()?;
+        }
+        Ok(Rule { production, action })
+    }
+}
+
 /// ```text
 /// Production ::= Part+
-/// Part ::= (Pat ':')? '@'? ('&' | '!')? Atom ('*' | '+' | '?')?
-/// Atom ::= '(' Production ')'
-///        | '[' Production ('|' Production)* ']'
-///        | Terminal
-///        | NonTerminal
 /// ```
 #[derive(Debug)]
 pub struct Production {
@@ -51,10 +139,18 @@ impl Production {
     }
 }
 
-#[derive(Debug)]
-pub struct Part {
-    pub capture: Capture,
-    pub part: Atom,
+impl syn::parse::Parse for Production {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let first_part = input.parse::<Part>()?;
+        let mut rest_parts = Vec::new();
+        while !input.peek(Token![=>]) && !input.peek(Token![|]) && !input.is_empty() {
+            // Production ::= Part+
+            rest_parts.push(input.parse::<Part>()?);
+        }
+
+        let parts = (first_part, rest_parts);
+        Ok(Production { parts })
+    }
 }
 
 #[derive(Debug)]
@@ -64,6 +160,72 @@ pub enum Capture {
     NotSpecified,
 }
 
+/// ```text
+/// Part ::= (Pat ':')? '@'? ('&' | '!')? Atom ('*' | '+' | '?')?
+/// ```
+#[derive(Debug)]
+pub struct Part {
+    pub capture: Capture,
+    pub part: Atom,
+}
+
+impl syn::parse::Parse for Part {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let fork = input.fork();
+        let capture = if let Ok(pat) = fork
+            .call(syn::Pat::parse_single)
+            .and_then(|pat| fork.parse::<Token![:]>().map(|_| pat))
+        {
+            // Choice ::= Pat ':' Atom ...
+            input.advance_to(&fork);
+            Some(pat)
+        } else {
+            None
+        };
+
+        let non_slient = if input.peek(Token![@]) {
+            // Choice ::= ... '@' ...
+            input.parse::<Token![@]>()?;
+            true
+        } else {
+            false
+        };
+
+        let atom = input.parse::<Atom>()?;
+        let part = if input.peek(Token![*]) {
+            // Choice ::= ... Atom '*'
+            input.parse::<Token![*]>()?;
+            Atom::Repeat(Box::new(atom))
+        } else if input.peek(Token![+]) {
+            // Choice ::= ... Atom '+'
+            input.parse::<Token![+]>()?;
+            Atom::Repeat1(Box::new(atom))
+        } else if input.peek(Token![?]) {
+            // Choice ::= ... Atom '?'
+            input.parse::<Token![?]>()?;
+            Atom::Optional(Box::new(atom))
+        } else {
+            atom
+        };
+
+        let capture = if let Some(capture) = capture {
+            Capture::Named(Box::new(capture))
+        } else if non_slient {
+            Capture::Loud
+        } else {
+            Capture::NotSpecified
+        };
+
+        Ok(Part { capture, part })
+    }
+}
+
+/// ```text
+/// Atom ::= '(' Production ')'
+///        | '[' Production ('|' Production)* ']'
+///        | Terminal
+///        | NonTerminal
+/// ```
 #[derive(Debug)]
 pub enum Atom {
     Terminal(syn::Lit),
@@ -75,4 +237,53 @@ pub enum Atom {
     Optional(Box<Atom>),
     LookAhead(Box<Atom>),
     LookAheadNot(Box<Atom>),
+}
+
+impl syn::parse::Parse for Atom {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let lookahead = input.lookahead1();
+        let atom = if lookahead.peek(syn::token::Paren) {
+            // Atom ::= '(' Production ')'
+            let content;
+            syn::parenthesized!(content in input);
+            Atom::Sub(Box::new(content.parse()?))
+        } else if lookahead.peek(syn::token::Bracket) {
+            // Atom ::= '[' Production ('|' Production)* ']'
+            let content;
+            syn::bracketed!(content in input);
+            let mut choices = content
+                .parse_terminated(Production::parse, Token![|])?
+                .into_iter();
+            let first_choice = choices
+                .next()
+                .ok_or_else(|| content.error("expected at least one choice"))?;
+            Atom::Choice(Box::new(first_choice), choices.collect())
+        } else if lookahead.peek(syn::Lit) {
+            // Atom ::= Terminal
+            Atom::Terminal(input.parse()?)
+        } else if lookahead.peek(syn::Ident) {
+            // Atom ::= NonTerminal
+            Atom::NonTerminal(input.parse()?)
+        } else {
+            return Err(lookahead.error());
+        };
+
+        Ok(atom)
+    }
+}
+
+fn requires_comma_to_be_match_arm(expr: &syn::Expr) -> bool {
+    use syn::Expr;
+    !matches!(
+        expr,
+        Expr::If(_)
+            | Expr::Match(_)
+            | Expr::Block(_)
+            | Expr::Unsafe(_)
+            | Expr::While(_)
+            | Expr::Loop(_)
+            | Expr::ForLoop(_)
+            | Expr::TryBlock(_)
+            | Expr::Const(_)
+    )
 }

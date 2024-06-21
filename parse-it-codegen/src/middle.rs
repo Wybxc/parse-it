@@ -344,17 +344,9 @@ impl ParserRef {
 }
 
 pub struct Middle {
+    pub attrs: Vec<syn::Attribute>,
     pub crate_name: TokenStream,
     pub mod_name: syn::Ident,
+    pub items: Vec<syn::Item>,
     pub parsers: Vec<ParserImpl>,
-}
-
-impl Middle {
-    pub fn new(crate_name: TokenStream, mod_name: syn::Ident) -> Self {
-        Self {
-            crate_name,
-            mod_name,
-            parsers: vec![],
-        }
-    }
 }

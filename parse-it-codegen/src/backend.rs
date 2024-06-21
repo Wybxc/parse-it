@@ -57,10 +57,13 @@ impl Middle {
         }
 
         let mod_name = self.mod_name;
+        let attrs = self.attrs;
+        let items = self.items;
         Ok(quote! {
             #[allow(non_snake_case)]
+            #(#attrs)*
             mod #mod_name {
-                use super::*;
+                #(#items)*
                 #result
             }
         })

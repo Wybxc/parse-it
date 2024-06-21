@@ -15,6 +15,8 @@ pub enum Instr {
 
 parse_it::parse_it! {
     mod parse {
+        use super::Instr;
+
         pub Brainfuck -> Vec<Instr> {
             Primitive* => self,
         }
