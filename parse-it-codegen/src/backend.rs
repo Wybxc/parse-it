@@ -56,40 +56,13 @@ impl Middle {
             result.extend(parser.expand(&ctx)?);
         }
 
-        let crate_name = &ctx.crate_name;
-        for id in &self.results {
-            let ret_ty = ret_ty.get(id).ok_or_else(|| {
-                quote_spanned! { id.span() => compile_error!("use of undeclared parser") }
-            })?;
-            let depends = depends.get(id).ok_or_else(|| {
-                quote_spanned! { id.span() => compile_error!("use of undeclared parser") }
-            })?;
-            let depends_def = depends.iter().map(|(d, ty)| {
-                let d = d.as_ident();
-                quote! { let #d = &#ty::default(); }
-            });
-            let depends_use = depends.iter().map(|(d, _)| d.as_ident());
-
-            result.extend(quote! {
-                impl #crate_name::ParseIt for #id {
-                    type Output = #ret_ty;
-
-                    fn parse_stream(&self, state: &#crate_name::ParserState<char>) -> Result<#ret_ty, ::parse_it::Error> {
-                        #(#depends_def)*
-                        self.parse_memo(state, #(#depends_use),*)
-                    }
-                }
-            });
-        }
-
-        let results = self.results;
+        let mod_name = self.mod_name;
         Ok(quote! {
             #[allow(non_snake_case)]
-            mod __parse_it {
+            mod #mod_name {
                 use super::*;
                 #result
             }
-            use __parse_it::{#(#results),*};
         })
     }
 }
@@ -164,9 +137,26 @@ impl ParserImpl {
             }
         };
 
+        let depends_def = self.depends.iter().map(|(d, ty)| {
+            let d = d.as_ident();
+            quote! { let #d = &#ty::default(); }
+        });
+        let depends_use = self.depends.iter().map(|(d, _)| d.as_ident());
+        let parse_it = quote! {
+            impl #crate_name::ParseIt for #name {
+                type Output = #ret_ty;
+
+                fn parse_stream(&self, state: &#crate_name::ParserState<char>) -> Result<#ret_ty, ::parse_it::Error> {
+                    #(#depends_def)*
+                    self.parse_memo(state, #(#depends_use),*)
+                }
+            }
+        };
+
+        let vis = self.vis;
         Ok(quote! {
             #[derive(Default)]
-            pub struct #name {
+            #vis struct #name {
                 #memo_decl
             }
 
@@ -174,6 +164,8 @@ impl ParserImpl {
                 #parse_impl
                 #parse_memo
             }
+
+            #parse_it
         })
     }
 }

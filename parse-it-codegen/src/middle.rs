@@ -317,6 +317,7 @@ pub struct ParserImpl {
     pub curr: ParserRef,
     pub parser: Parsing,
     pub memo: MemoKind,
+    pub vis: syn::Visibility,
     pub ret_ty: syn::Type,
     pub depends: Vec<(ParserRef, syn::Ident)>,
 }
@@ -344,16 +345,16 @@ impl ParserRef {
 
 pub struct Middle {
     pub crate_name: TokenStream,
+    pub mod_name: syn::Ident,
     pub parsers: Vec<ParserImpl>,
-    pub results: Vec<syn::Ident>,
 }
 
 impl Middle {
-    pub fn new(crate_name: TokenStream) -> Self {
+    pub fn new(crate_name: TokenStream, mod_name: syn::Ident) -> Self {
         Self {
             crate_name,
+            mod_name,
             parsers: vec![],
-            results: vec![],
         }
     }
 }

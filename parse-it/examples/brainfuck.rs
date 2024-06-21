@@ -14,25 +14,25 @@ pub enum Instr {
 }
 
 parse_it::parse_it! {
-    Brainfuck -> Vec<Instr> {
-        Primitive* => self,
-    }
+    mod parse {
+        pub Brainfuck -> Vec<Instr> {
+            Primitive* => self,
+        }
 
-    Primitive -> Instr {
-        '<' => Instr::Left,
-        '>' => Instr::Right,
-        '+' => Instr::Incr,
-        '-' => Instr::Decr,
-        ',' => Instr::Read,
-        '.' => Instr::Write,
-        '[' Primitive+ ']' => Instr::Loop(self)
+        Primitive -> Instr {
+            '<' => Instr::Left,
+            '>' => Instr::Right,
+            '+' => Instr::Incr,
+            '-' => Instr::Decr,
+            ',' => Instr::Read,
+            '.' => Instr::Write,
+            '[' Primitive+ ']' => Instr::Loop(self)
+        }
     }
-
-    return Brainfuck;
 }
 
 fn main() {
-    let parser = Brainfuck::default();
+    let parser = parse::Brainfuck::default();
     let src = "--[>--->->->++>-<<<<<-------]>--.>---------.>--..+++.>----.>+++++++++.<<.+++.------.<-.>>+.";
 
     match parser.parse(src) {

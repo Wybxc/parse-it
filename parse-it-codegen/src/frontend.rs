@@ -45,22 +45,19 @@ impl VisitMut for ExprVisitor {
 
 impl ParseIt {
     pub fn compile(self) -> Result<Middle, TokenStream> {
-        let mut middle = Middle::new(match &self.crate_name {
-            Some(crate_name) => quote! { #crate_name },
-            None => quote! { ::parse_it },
-        });
         let mut ctx = Context::default();
 
         self.analyze_left_recursion(&mut ctx);
         self.analyze_depends(&mut ctx);
 
+        let crate_name = match &self.crate_name {
+            Some(crate_name) => quote! { #crate_name },
+            None => quote! { ::parse_it },
+        };
+        let mut middle = Middle::new(crate_name, self.mod_name);
         for parser in self.parsers {
             let parser = parser.compile(&mut ctx)?;
             middle.parsers.push(parser);
-        }
-
-        for name in self.results {
-            middle.results.push(name);
         }
 
         Ok(middle)
@@ -137,6 +134,7 @@ impl Parser {
             curr,
             parser,
             memo,
+            vis: self.vis,
             ret_ty: self.ty,
             depends,
         })

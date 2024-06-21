@@ -1,34 +1,45 @@
 use parse_it_codegen::syntax::{Atom, Capture, ParseIt, Parser, Part, Production, Rule};
 use syn::parse::discouraged::Speculative;
-use syn::parse::{Parse, ParseStream};
+use syn::parse::ParseStream;
 use syn::{Result, Token};
 
 fn parse(input: ParseStream) -> Result<ParseIt> {
-    let mut parsers = vec![];
-    let mut results = vec![];
-    while !input.is_empty() {
-        if input.peek(Token![return]) {
-            input.parse::<Token![return]>()?;
-            if input.peek(syn::token::Paren) {
-                let content;
-                syn::parenthesized!(content in input);
-                results.extend(content.parse_terminated(syn::Ident::parse, Token![,])?);
-            } else {
-                results.push(input.parse::<syn::Ident>()?);
-            }
-            input.parse::<Token![;]>()?;
-            continue;
+    let mut crate_name = None;
+    let attrs = input.call(syn::Attribute::parse_outer)?;
+    for attr in attrs {
+        if attr.path().is_ident("parse_it") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("crate") {
+                    let value = meta.value()?;
+                    let value = value.parse::<syn::LitStr>()?;
+                    crate_name = Some(value.parse().map_err(|mut e| {
+                        e.combine(syn::Error::new_spanned(value, "expected a valid path"));
+                        e
+                    })?);
+                }
+                Ok(())
+            })?;
         }
-        parsers.push(input.call(parse_parser)?);
+    }
+
+    input.parse::<Token![mod]>()?;
+    let mod_name = input.parse::<syn::Ident>()?;
+
+    let content;
+    syn::braced!(content in input);
+    let mut parsers = vec![];
+    while !content.is_empty() {
+        parsers.push(content.call(parse_parser)?);
     }
     Ok(ParseIt {
-        crate_name: None, // TODO: parse crate name
+        crate_name,
+        mod_name,
         parsers,
-        results,
     })
 }
 
 fn parse_parser(input: ParseStream) -> Result<Parser> {
+    let vis = input.parse::<syn::Visibility>()?;
     let name = input.parse::<syn::Ident>()?;
     input.parse::<Token![->]>()?;
     let ty = input.parse::<syn::Type>()?;
@@ -44,7 +55,12 @@ fn parse_parser(input: ParseStream) -> Result<Parser> {
     }
     let rules = (first_rule, rules);
 
-    Ok(Parser { name, ty, rules })
+    Ok(Parser {
+        vis,
+        name,
+        ty,
+        rules,
+    })
 }
 
 fn parse_rule(input: ParseStream) -> Result<Rule> {

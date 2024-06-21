@@ -1,15 +1,16 @@
 #[derive(Debug)]
 pub struct ParseIt {
     pub crate_name: Option<syn::Path>,
+    pub mod_name: syn::Ident,
     pub parsers: Vec<Parser>,
-    pub results: Vec<syn::Ident>,
 }
 
 /// ```text
-/// Parser ::= Name '->' Type '{' Rule+ '}'
+/// Parser ::= Vis Name '->' Type '{' Rule+ '}'
 /// ```
 #[derive(Debug)]
 pub struct Parser {
+    pub vis: syn::Visibility,
     pub name: syn::Ident,
     pub ty: syn::Type,
     pub rules: (Rule, Vec<Rule>),
