@@ -1,26 +1,105 @@
+//! Basic definitions for working with the parser.
+//!
+//! If you're looking for a convenient way to parse data, you don't need to dive into
+//! the details of the parser. The [`ParseIt::parse`] method abstracts away all the
+//! complexity, making it easy to use.
+//!
+//! However, if you're interested in learning more about how the parser works under the
+//! hood, you can refer to the [`ParserState`] documentation.
+//!
+//! [`ParseIt::parse`]: crate::ParseIt::parse
+
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::lexer::Lexer;
 
+/// A span in the source code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
+    /// The start of the span, inclusive
     pub start: usize,
+    /// The end of the span, exclusive
     pub end: usize,
 }
 
+/// An error that occurred during parsing.
 #[derive(Debug)]
 pub struct Error {
+    /// The span in the source code where the error occurred.
     pub span: Span,
 }
 
 impl Error {
+    /// Create a new error from the given span.
     pub fn new(span: Span) -> Self {
         Self { span }
     }
 }
 
+/// The inner state of a parser.
+///
+/// `ParserState` is a cursor over the lexer and keeps track of the current position
+/// in the source code. It is used to drive the parsing process.
+///
+/// # Writing a Parser
+///
+/// A parser is a function `Fn(&ParserState) -> Result<T, Error>`, that takes a 
+/// `&ParserState` as input and returns the parsed result or an error. 
+///
+/// The common use case is to call the [`parse`](ParserState::parse) method to
+/// read a token from the lexer and advance the state by one token.
+///
+/// ```
+/// fn parse_abc(state: &ParserState<CharLexer>) -> Result<char, Error> {
+///     state.parse('a')?;
+///     state.parse('b')?;
+///     state.parse('c')?;
+///     Ok('c')
+/// }
+///
+/// let state = ParserState::new(CharLexer::new("abc"));
+/// parse_abc(&state).unwrap();
+/// assert!(state.is_empty());
+/// ```
+/// 
+/// Please note that `ParserState` uses interior mutability to share its state
+/// between parsers. This means that even if a parser takes a `&ParserState`,
+/// the state can still be mutated.
+///
+/// # Speculative Parsing
+///
+/// `ParserState` allows you to create a fork of the current state via the
+/// [`fork`](ParserState::fork) method, and join it back to the original state
+/// later via the [`advance_to`](ParserState::advance_to) method. This is useful
+/// for speculative parsing.
+///
+/// It's important to note that `ParserState` can only move forward and not
+/// backward. When joining a fork back to the original state, it must be
+/// ensured that the fork is at a position beyond or equal to the original
+/// state.
+///
+/// ```
+/// fn parse_option(
+///     state: &ParserState<CharLexer>,
+///     parser: impl Fn(&ParserState<CharLexer>) -> Result<char, Error>
+/// ) -> Result<Option<char>, Error> {
+///     let fork = state.fork();
+///     match parser(&fork) {
+///         Ok(c) => {
+///             state.advance_to(&fork);
+///             Ok(Some(c))
+///         }
+///         Err(_) => Ok(None),
+///     }
+/// }
+///
+/// let state = ParserState::new(CharLexer::new("aaa"));
+/// assert_eq!(parse_option(&state, |state| state.parse('a')).unwrap(), Some('a'));
+/// assert_eq!(parse_option(&state, |state| state.parse('b')).unwrap(), None);
+/// assert!(state.is_empty());
+/// ```
 pub struct ParserState<L> {
     span: Cell<Span>,
     lexer: L,
@@ -28,6 +107,7 @@ pub struct ParserState<L> {
 }
 
 impl<'a, L: Lexer<'a>> ParserState<L> {
+    /// Create a new parser state from the given lexer.
     pub fn new(lexer: L) -> Self {
         Self {
             span: Cell::new(Span { start: 0, end: 0 }),
@@ -36,11 +116,13 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
         }
     }
 
+    /// Get the current parsing position.
     pub fn pos(&self) -> L::Position {
         self.lexer.pos()
     }
 
-    pub fn next(&self) -> Option<L::Token> {
+    /// Advance to the next token.
+    fn next(&self) -> Option<L::Token> {
         match self.lexer.next() {
             (Some(token), advance) => {
                 let Span { end, .. } = self.span.get();
@@ -54,6 +136,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
         }
     }
 
+    /// Consume the next token if it matches the given token.
     pub fn parse(&self, token: L::Token) -> Result<L::Token, Error> {
         match self.next() {
             Some(tt) if tt == token => Ok(tt),
@@ -61,10 +144,12 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
         }
     }
 
+    /// Report an error at the current position.
     pub fn error(&self) -> Error {
         Error::new(self.span.get())
     }
 
+    /// Whether the parser is at the end of the input.
     pub fn is_empty(&self) -> bool {
         self.lexer.is_empty()
     }
@@ -86,6 +171,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
         self.lexer.advance_to_pos(pos);
     }
 
+    /// Create a fork of the current state for speculative parsing.
     pub fn fork(&self) -> Self {
         Self {
             span: self.span.clone(),
@@ -94,14 +180,17 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
         }
     }
 
+    /// Push the given name onto the stack (for debugging purposes).
     pub fn push(&self, name: &'static str) {
         self.stack.borrow_mut().push((name, self.span.get().end));
     }
 
+    /// Pop the last name from the stack (for debugging purposes).
     pub fn pop(&self) {
         self.stack.borrow_mut().pop();
     }
 
+    /// Get the current stack (for debugging purposes).
     pub fn debug(&self) -> String {
         format!("{:?}", self.stack.borrow())
     }

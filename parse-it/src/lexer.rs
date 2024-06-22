@@ -1,18 +1,35 @@
+//! Lexing for the parser.
+
 use std::cell::Cell;
 use std::hash::Hash;
 
+/// A lexer for the parser.
 pub trait Lexer<'a> {
+    /// The lexed token type.
     type Token: Copy + Eq;
+    /// The position type.
     type Position: Copy + Eq + Ord + Hash;
 
+    /// Create a new lexer from the given input.
     fn new(input: &'a str) -> Self;
+
+    /// Get the current parsing position.
     fn pos(&self) -> Self::Position;
+
+    /// Consume the next token.
     fn next(&self) -> (Option<Self::Token>, usize);
+
+    /// Whether the lexer is at the end of the input.
     fn is_empty(&self) -> bool;
+
+    /// Advance the lexer to the given position.
     fn advance_to_pos(&self, pos: Self::Position);
+
+    /// Fork the lexer.
     fn fork(&self) -> Self;
 }
 
+/// A lexer for a single character.
 pub struct CharLexer<'a> {
     pos: Cell<usize>,
     remaining: Cell<&'a str>,

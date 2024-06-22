@@ -42,3 +42,11 @@ let src = "--[>--->->->++>-<<<<<-------]>--.>---------.>--..+++.>----.>+++++++++
 let instrs = parse::Brainfuck.parse(src).unwrap();
 println!("{:?}", instrs);
 ```
+
+## Planned features
+
+- [x] Parser generation
+- [ ] Lexer generation
+- [ ] Error reporting
+- [ ] Error recovery
+- [ ] Grammar lints
