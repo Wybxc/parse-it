@@ -8,4 +8,4 @@
 
 # Blog
 
-- [Parser as a DSL: The Story of "Parse It"](./blog/parser-as-a-dsl.md)
+- [Parser Calculus: Monads, and more](./blog/calculus.md)
