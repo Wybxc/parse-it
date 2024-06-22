@@ -8,7 +8,7 @@
 use parse_it::{ParseIt, parse_it};
 
 #[derive(Debug, Clone)]
-enum Instr {
+pub enum Instr {
     Left,
     Right,
     Incr,
@@ -38,9 +38,12 @@ parse_it! {
     }
 }
 
-let src = "--[>--->->->++>-<<<<<-------]>--.>---------.>--..+++.>----.>+++++++++.<<.+++.------.<-.>>+.";
-let instrs = parse::Brainfuck.parse(src).unwrap();
-println!("{:?}", instrs);
+fn main() {
+    let parser = parse::Brainfuck::default();
+    let src = "--[>--->->->++>-<<<<<-------]>--.>---------.>--..+++.>----.>+++++++++.<<.+++.------.<-.>>+";
+    let instrs = parser.parse(src).unwrap();
+    println!("{:?}", instrs);
+}
 ```
 
 ## Planned features

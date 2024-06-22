@@ -52,6 +52,7 @@ impl Error {
 /// read a token from the lexer and advance the state by one token.
 ///
 /// ```
+/// # use parse_it::*;
 /// fn parse_abc(state: &ParserState<CharLexer>) -> Result<char, Error> {
 ///     state.parse('a')?;
 ///     state.parse('b')?;
@@ -81,6 +82,7 @@ impl Error {
 /// state.
 ///
 /// ```
+/// # use parse_it::*;
 /// fn parse_option(
 ///     state: &ParserState<CharLexer>,
 ///     parser: impl Fn(&ParserState<CharLexer>) -> Result<char, Error>
@@ -98,7 +100,6 @@ impl Error {
 /// let state = ParserState::new(CharLexer::new("aaa"));
 /// assert_eq!(parse_option(&state, |state| state.parse('a')).unwrap(), Some('a'));
 /// assert_eq!(parse_option(&state, |state| state.parse('b')).unwrap(), None);
-/// assert!(state.is_empty());
 /// ```
 pub struct ParserState<L> {
     span: Cell<Span>,

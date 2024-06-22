@@ -211,18 +211,18 @@ impl Parsing {
 }
 
 pub enum ParseOp {
-    /// ```
+    /// ```ignore
     /// {state}.char({0})
     /// ```
     Just(char),
-    /// ```
+    /// ```ignore
     /// {parser}.parse_memo({state}, {..depends})
     /// ```
     Call {
         parser: ParserRef,
         depends: Vec<ParserRef>,
     },
-    /// ```
+    /// ```ignore
     /// {parser}.map(|{cap}| {f})
     /// ```
     Map {
@@ -230,28 +230,28 @@ pub enum ParseOp {
         cap: Capture,
         expr: syn::Expr,
     },
-    /// ```
+    /// ```ignore
     /// match {prev} {
     ///     Ok(v1) => {next}.map(|v2| (v1, v2)),
     ///     Err(e) => Err(e),
     /// }
     /// ```
     Then { prev: Value, next: Box<Parsing> },
-    /// ```
+    /// ```ignore
     /// match {prev} {
     ///     Ok(v1) => {next}.map(|_| v1),
     ///     Err(e) => Err(e),
     /// }
     /// ```
     ThenIgnore { prev: Value, next: Box<Parsing> },
-    /// ```
+    /// ```ignore
     /// match {prev} {
     ///     Ok(_) => {next},
     ///     Err(e) => Err(e),
     /// }
     /// ```
     IgnoreThen { prev: Value, next: Box<Parsing> },
-    /// ```
+    /// ```ignore
     /// let fork = &{state}.fork();    
     /// let mut results = vec![];
     /// while let Ok(value) = {parser/fork} {
@@ -268,16 +268,16 @@ pub enum ParseOp {
         parser: Box<Parsing>,
         at_least: usize,
     },
-    /// ```
+    /// ```ignore
     /// {parser}.ok()
     /// ```
     Optional { parser: Box<Parsing> },
-    /// ```
+    /// ```ignore
     /// let fork = &{state}.fork();
     /// {parser/fork}.map(|_| ())
     /// ```
     LookAhead { parser: Box<Parsing> },
-    /// ```
+    /// ```ignore
     /// let fork = &{state}.fork();
     /// if let Ok(value) = {parser/fork} {
     ///     Err(state.error())
@@ -286,7 +286,7 @@ pub enum ParseOp {
     /// }
     /// ```
     LookAheadNot { parser: Box<Parsing> },
-    /// ```
+    /// ```ignore
     /// let mut fork = &{state}.fork();
     /// if let Ok(value) = {parser[0]/fork} {
     ///     {state}.advance_to(fork);

@@ -78,13 +78,14 @@ pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
 /// The algorithm used is based on this [blog post].
 /// 
 /// ```
+/// # use parse_it::*;
 /// fn parse(
 ///     state: &ParserState<CharLexer>, 
 ///     memo: &Memo<usize, Option<String>>,
 /// ) -> Result<String, Error> {
 ///     left_rec(state, memo, |state| {
 ///         let fork = state.fork();
-///         if let Ok(mut s) = parse(fork) {
+///         if let Ok(mut s) = parse(&fork, memo) {
 ///             state.advance_to(&fork);
 ///             s.push(state.parse('b')?);
 ///             Ok(s)
