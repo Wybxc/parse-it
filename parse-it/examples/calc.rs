@@ -51,7 +51,6 @@ fn main() {
         Ok(value) => value,
         Err(err) => {
             println!("span: {}..{}", err.span.0, err.span.1);
-            println!("{}", err.backtrace);
             return;
         }
     };

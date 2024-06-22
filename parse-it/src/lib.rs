@@ -1,16 +1,13 @@
 #![doc=include_str!("../../README.md")]
 
-mod arena;
-pub mod combinator;
-
+pub mod memo;
 pub mod parser;
-pub mod primitive;
-pub mod recursive;
 
 pub use parse_it_macros::parse_it;
 
+pub use crate::memo::{left_rec, memorize, Memo};
 use crate::parser::Token;
-pub use crate::parser::{left_rec, memorize, Error, Memo, ParserState};
+pub use crate::parser::{Error, ParserState};
 
 pub trait ParseIt {
     type Output;

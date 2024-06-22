@@ -5,6 +5,8 @@
 ## Example
 
 ```rust
+use parse_it::{ParseIt, parse_it};
+
 #[derive(Debug, Clone)]
 enum Instr {
     Left,
@@ -16,26 +18,27 @@ enum Instr {
     Loop(Vec<Self>),
 }
 
-let parser = parse_it::parse_it! {
-    Brainfuck -> Vec<Instr> {
-        Primitive* => self,
-    }
+parse_it! {
+    mod parse {
+        use super::Instr;
 
-    Primitive -> Instr {
-        '<' => Instr::Left,
-        '>' => Instr::Right,
-        '+' => Instr::Incr,
-        '-' => Instr::Decr,
-        ',' => Instr::Read,
-        '.' => Instr::Write,
-        '[' Primitive+ ']' => Instr::Loop(self)
-    }
+        pub Brainfuck -> Vec<Instr> {
+            Primitive* => self,
+        }
 
-    return Brainfuck;
-};
+        Primitive -> Instr {
+            '<' => Instr::Left,
+            '>' => Instr::Right,
+            '+' => Instr::Incr,
+            '-' => Instr::Decr,
+            ',' => Instr::Read,
+            '.' => Instr::Write,
+            '[' Primitive+ ']' => Instr::Loop(self)
+        }
+    }
+}
 
 let src = "--[>--->->->++>-<<<<<-------]>--.>---------.>--..+++.>----.>+++++++++.<<.+++.------.<-.>>+.";
-
-let instrs = parser.parse(src).unwrap();
+let instrs = parse::Brainfuck.parse(src).unwrap();
 println!("{:?}", instrs);
 ```
