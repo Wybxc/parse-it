@@ -50,7 +50,7 @@ fn main() {
     let result = match parser.parse(input) {
         Ok(value) => value,
         Err(err) => {
-            println!("span: {}..{}", err.span.0, err.span.1);
+            println!("span: {}..{}", err.span.start, err.span.end);
             return;
         }
     };

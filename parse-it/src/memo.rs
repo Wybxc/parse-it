@@ -1,16 +1,17 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::hash::Hash;
 
 use rustc_hash::FxHashMap;
 
-use crate::parser::Position;
+use crate::lexer::Lexer;
 use crate::{Error, ParserState};
 
-pub struct Memo<T: Clone> {
-    map: RefCell<FxHashMap<Position, (T, Position)>>,
+pub struct Memo<P: Clone + Eq + Hash, T: Clone> {
+    map: RefCell<FxHashMap<P, (T, P)>>,
 }
 
-impl<T: Clone> Default for Memo<T> {
+impl<P: Clone + Eq + Hash, T: Clone> Default for Memo<P, T> {
     fn default() -> Self {
         Self {
             map: RefCell::new(FxHashMap::default()),
@@ -18,27 +19,27 @@ impl<T: Clone> Default for Memo<T> {
     }
 }
 
-impl<T: Clone + Debug> Debug for Memo<T> {
+impl<P: Clone + Eq + Hash + Debug, T: Clone + Debug> Debug for Memo<P, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.map.borrow().fmt(f)
     }
 }
 
-impl<T: Clone> Memo<T> {
-    pub fn get(&self, pos: &Position) -> Option<(T, Position)> {
+impl<P: Clone + Eq + Hash, T: Clone> Memo<P, T> {
+    pub fn get(&self, pos: &P) -> Option<(T, P)> {
         self.map.borrow().get(pos).cloned()
     }
 
-    pub fn insert(&self, pos: Position, value: (T, Position)) {
+    pub fn insert(&self, pos: P, value: (T, P)) {
         self.map.borrow_mut().insert(pos, value);
     }
 }
 
 #[inline]
-pub fn memorize<K: Copy, T: Clone>(
-    state: &ParserState<K>,
-    memo: &Memo<T>,
-    parser: impl FnOnce(&ParserState<K>) -> Result<T, Error>,
+pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
+    state: &ParserState<L>,
+    memo: &Memo<L::Position, T>,
+    parser: impl FnOnce(&ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
     let pos = state.pos();
     if let Some((value, end)) = memo.get(&pos) {
@@ -53,10 +54,10 @@ pub fn memorize<K: Copy, T: Clone>(
 }
 
 #[inline]
-pub fn left_rec<K: Copy, T: Clone>(
-    state: &ParserState<K>,
-    memo: &Memo<Option<T>>,
-    mut parser: impl FnMut(&ParserState<K>) -> Result<T, Error>,
+pub fn left_rec<'a, L: Lexer<'a>, T: Clone>(
+    state: &ParserState<L>,
+    memo: &Memo<L::Position, Option<T>>,
+    mut parser: impl FnMut(&ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
     let pos = state.pos();
     if let Some((value, end)) = memo.get(&pos) {

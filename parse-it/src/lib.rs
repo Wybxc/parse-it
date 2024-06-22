@@ -1,29 +1,23 @@
 #![doc=include_str!("../../README.md")]
 
+pub mod lexer;
 pub mod memo;
 pub mod parser;
 
 pub use parse_it_macros::parse_it;
 
+pub use crate::lexer::{CharLexer, Lexer};
 pub use crate::memo::{left_rec, memorize, Memo};
-use crate::parser::Token;
 pub use crate::parser::{Error, ParserState};
 
 pub trait ParseIt {
+    type Lexer<'a>: Lexer<'a>;
     type Output;
 
-    fn parse_stream(&self, state: &ParserState<char>) -> Result<Self::Output, Error>;
+    fn parse_stream(&self, state: &ParserState<Self::Lexer<'_>>) -> Result<Self::Output, Error>;
 
     fn parse(&self, input: &str) -> Result<Self::Output, Error> {
-        let state = ParserState::new(
-            input
-                .char_indices()
-                .map(|(i, c)| Token {
-                    kind: c,
-                    span: (i, i + c.len_utf8()),
-                })
-                .collect(),
-        );
+        let state = ParserState::new(Self::Lexer::new(input));
         self.parse_stream(&state)
     }
 }

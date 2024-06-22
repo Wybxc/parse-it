@@ -100,6 +100,13 @@ impl ParserImpl {
             quote! { #name: &#ty }
         });
         let depends_decl = quote! { #(#depends_decl),* };
+        let depends_use = self.depends.iter().map(|(d, _)| d.as_ident());
+        let depends_use = quote! { #(#depends_use),* };
+        let depends_def = self.depends.iter().map(|(d, ty)| {
+            let d = d.as_ident();
+            quote! { let #d = &#ty::default(); }
+        });
+        let depends_def = quote! { #(#depends_def)* };
 
         let state_token = StateToken::new();
         let state = state_token.to_ident();
@@ -107,7 +114,7 @@ impl ParserImpl {
         let parse_impl = quote! {
             fn parse_impl(
                 &self,
-                #state: &#crate_name::ParserState<char>,
+                #state: &#crate_name::ParserState<#crate_name::CharLexer>,
                 #depends_decl
             ) -> Result<#ret_ty, ::parse_it::Error> {
                 let #curr = self;
@@ -115,25 +122,26 @@ impl ParserImpl {
             }
         };
 
-        let depends_use = self.depends.iter().map(|(d, _)| d.as_ident());
         let memo_decl = match self.memo {
             MemoKind::None => quote! {},
-            MemoKind::Memorize => quote! { memo: #crate_name::Memo<#ret_ty> },
-            MemoKind::LeftRec => quote! { memo: #crate_name::Memo<::std::option::Option<#ret_ty>> },
+            MemoKind::Memorize => quote! { memo: #crate_name::Memo<usize, #ret_ty> },
+            MemoKind::LeftRec => {
+                quote! { memo: #crate_name::Memo<usize, ::std::option::Option<#ret_ty>> }
+            }
         };
         let memo_func = match self.memo {
-            MemoKind::None => quote! { self.parse_impl(#state, #(#depends_use),*)},
+            MemoKind::None => quote! { self.parse_impl(#state, #depends_use)},
             MemoKind::Memorize => {
-                quote! { #crate_name::memorize(#state, &self.memo, |state| self.parse_impl(state, #(#depends_use),*)) }
+                quote! { #crate_name::memorize(#state, &self.memo, |state| self.parse_impl(state, #depends_use)) }
             }
             MemoKind::LeftRec => {
-                quote! { #crate_name::left_rec(#state, &self.memo, |state| self.parse_impl(state, #(#depends_use),*)) }
+                quote! { #crate_name::left_rec(#state, &self.memo, |state| self.parse_impl(state, #depends_use)) }
             }
         };
         let parse_memo = quote! {
             fn parse_memo(
                 &self,
-                #state: &#crate_name::ParserState<char>,
+                #state: &#crate_name::ParserState<#crate_name::CharLexer>,
                 #depends_decl
             ) -> Result<#ret_ty, ::parse_it::Error> {
                 #state.push(Self::NAME);
@@ -143,25 +151,9 @@ impl ParserImpl {
             }
         };
 
-        let depends_def = self.depends.iter().map(|(d, ty)| {
-            let d = d.as_ident();
-            quote! { let #d = &#ty::default(); }
-        });
-        let depends_use = self.depends.iter().map(|(d, _)| d.as_ident());
-        let parse_it = quote! {
-            impl #crate_name::ParseIt for #name {
-                type Output = #ret_ty;
-
-                fn parse_stream(&self, state: &#crate_name::ParserState<char>) -> Result<#ret_ty, ::parse_it::Error> {
-                    #(#depends_def)*
-                    let result = self.parse_memo(state, #(#depends_use),*);
-                    result
-                }
-            }
-        };
-
         let name_str = name.to_string();
         let vis = self.vis;
+
         Ok(quote! {
             #[derive(Debug, Default)]
             #vis struct #name {
@@ -175,7 +167,16 @@ impl ParserImpl {
                 #parse_memo
             }
 
-            #parse_it
+            impl #crate_name::ParseIt for #name {
+                type Lexer<'a> = #crate_name::CharLexer<'a>;
+                type Output = #ret_ty;
+
+                fn parse_stream(&self, state: &#crate_name::ParserState<#crate_name::CharLexer>) -> Result<#ret_ty, ::parse_it::Error> {
+                    #depends_def
+                    let result = self.parse_memo(state, #depends_use);
+                    result
+                }
+            }
         })
     }
 }
