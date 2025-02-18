@@ -45,26 +45,26 @@ impl Error {
 ///
 /// # Writing a Parser
 ///
-/// A parser is a function `Fn(&ParserState) -> Result<T, Error>`, that takes a 
-/// `&ParserState` as input and returns the parsed result or an error. 
+/// A parser is a function `Fn(&ParserState) -> Result<T, Error>`, that takes a
+/// `&ParserState` as input and returns the parsed result or an error.
 ///
 /// The common use case is to call the [`parse`](ParserState::parse) method to
 /// read a token from the lexer and advance the state by one token.
 ///
 /// ```
 /// # use parse_it::*;
-/// fn parse_abc(state: &ParserState<CharLexer>) -> Result<char, Error> {
+/// fn parse_abc(state: &mut ParserState<CharLexer>) -> Result<char, Error> {
 ///     state.parse('a')?;
 ///     state.parse('b')?;
 ///     state.parse('c')?;
 ///     Ok('c')
 /// }
 ///
-/// let state = ParserState::new(CharLexer::new("abc"));
-/// parse_abc(&state).unwrap();
+/// let mut state = ParserState::new(CharLexer::new("abc"));
+/// parse_abc(&mut state).unwrap();
 /// assert!(state.is_empty());
 /// ```
-/// 
+///
 /// Please note that `ParserState` uses interior mutability to share its state
 /// between parsers. This means that even if a parser takes a `&ParserState`,
 /// the state can still be mutated.
@@ -84,22 +84,22 @@ impl Error {
 /// ```
 /// # use parse_it::*;
 /// fn parse_option(
-///     state: &ParserState<CharLexer>,
-///     parser: impl Fn(&ParserState<CharLexer>) -> Result<char, Error>
+///     state: &mut ParserState<CharLexer>,
+///     parser: impl Fn(&mut ParserState<CharLexer>) -> Result<char, Error>
 /// ) -> Result<Option<char>, Error> {
-///     let fork = state.fork();
-///     match parser(&fork) {
+///     let fork = &mut state.fork();
+///     match parser(fork) {
 ///         Ok(c) => {
-///             state.advance_to(&fork);
+///             state.advance_to(fork);
 ///             Ok(Some(c))
 ///         }
 ///         Err(_) => Ok(None),
 ///     }
 /// }
 ///
-/// let state = ParserState::new(CharLexer::new("aaa"));
-/// assert_eq!(parse_option(&state, |state| state.parse('a')).unwrap(), Some('a'));
-/// assert_eq!(parse_option(&state, |state| state.parse('b')).unwrap(), None);
+/// let mut state = ParserState::new(CharLexer::new("aaa"));
+/// assert_eq!(parse_option(&mut state, |state| state.parse('a')).unwrap(), Some('a'));
+/// assert_eq!(parse_option(&mut state, |state| state.parse('b')).unwrap(), None);
 /// ```
 pub struct ParserState<L> {
     span: Cell<Span>,
@@ -123,7 +123,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     }
 
     /// Advance to the next token.
-    fn next(&self) -> Option<L::Token> {
+    fn next(&mut self) -> Option<L::Token> {
         match self.lexer.next() {
             (Some(token), advance) => {
                 let Span { end, .. } = self.span.get();
@@ -138,7 +138,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     }
 
     /// Consume the next token if it matches the given token.
-    pub fn parse(&self, token: L::Token) -> Result<L::Token, Error> {
+    pub fn parse(&mut self, token: L::Token) -> Result<L::Token, Error> {
         match self.next() {
             Some(tt) if tt == token => Ok(tt),
             _ => Err(self.error()),
@@ -159,7 +159,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     ///
     /// # Panics
     /// Panics if the given state is before the current state.
-    pub fn advance_to(&self, other: &Self) {
+    pub fn advance_to(&mut self, other: &Self) {
         self.advance_to_pos(other.lexer.pos())
     }
 
@@ -167,7 +167,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     ///
     /// # Panics
     /// Panics if the given position is before the current position.
-    pub fn advance_to_pos(&self, pos: L::Position) {
+    pub fn advance_to_pos(&mut self, pos: L::Position) {
         assert!(pos >= self.lexer.pos(), "you cannot rewind");
         self.lexer.advance_to_pos(pos);
     }

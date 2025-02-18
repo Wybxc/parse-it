@@ -114,7 +114,7 @@ impl ParserImpl {
         let parse_impl = quote! {
             fn parse_impl(
                 &self,
-                #state: &#crate_name::ParserState<#crate_name::CharLexer>,
+                #state: &mut #crate_name::ParserState<#crate_name::CharLexer>,
                 #depends_decl
             ) -> Result<#ret_ty, ::parse_it::Error> {
                 let #curr = self;
@@ -141,7 +141,7 @@ impl ParserImpl {
         let parse_memo = quote! {
             fn parse_memo(
                 &self,
-                #state: &#crate_name::ParserState<#crate_name::CharLexer>,
+                #state: &mut #crate_name::ParserState<#crate_name::CharLexer>,
                 #depends_decl
             ) -> Result<#ret_ty, ::parse_it::Error> {
                 #state.push(Self::NAME);
@@ -171,7 +171,7 @@ impl ParserImpl {
                 type Lexer<'a> = #crate_name::CharLexer<'a>;
                 type Output = #ret_ty;
 
-                fn parse_stream(&self, state: &#crate_name::ParserState<#crate_name::CharLexer>) -> Result<#ret_ty, ::parse_it::Error> {
+                fn parse_stream(&self, state: &mut #crate_name::ParserState<#crate_name::CharLexer>) -> Result<#ret_ty, ::parse_it::Error> {
                     #depends_def
                     let result = self.parse_memo(state, #depends_use);
                     result
@@ -235,7 +235,7 @@ impl Parsing {
                     let fork = fork_token.to_ident();
                     let parser = parser.expand(fork_token)?;
                     let repeat = quote! {
-                        let #fork = &#state.fork();
+                        let #fork = &mut #state.fork();
                         let mut results = vec![];
                         while let Ok(value) = #parser {
                             #state.advance_to(&#fork);
@@ -267,7 +267,7 @@ impl Parsing {
                     let fork = fork_token.to_ident();
                     let parser = parser.expand(fork_token)?;
                     quote! {
-                        let #fork = &#state.fork();
+                        let #fork = &mut #state.fork();
                         let #value = #parser.map(|_| ());
                     }
                 }
@@ -276,7 +276,7 @@ impl Parsing {
                     let fork = fork_token.to_ident();
                     let parser = parser.expand(fork_token)?;
                     quote! {
-                        let #fork = &#state.fork();
+                        let #fork = &mut #state.fork();
                         let #value = if let Ok(value) = #parser {
                             Err(#state.error())
                         } else {
@@ -296,7 +296,7 @@ impl Parsing {
                         let mut #fork;
                         let #value = #(if let Ok(value) = {
                             fork = #state.fork();
-                            #fork = &fork;
+                            #fork = &mut fork;
                             #parsers
                         } {
                             #state.advance_to(#fork);

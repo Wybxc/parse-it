@@ -1,12 +1,12 @@
 //! # Parse It
-//! 
+//!
 //! *A user-friendly, opinionated parser generator for Rust.*
-//! 
+//!
 //! ## Example
-//! 
+//!
 //! ```rust
 //! use parse_it::{ParseIt, parse_it};
-//! 
+//!
 //! #[derive(Debug, Clone)]
 //! pub enum Instr {
 //!     Left,
@@ -17,15 +17,15 @@
 //!     Write,
 //!     Loop(Vec<Self>),
 //! }
-//! 
+//!
 //! parse_it! {
 //!     mod parse {
 //!         use super::Instr;
-//! 
+//!
 //!         pub Brainfuck -> Vec<Instr> {
 //!             Primitive* => self,
 //!         }
-//! 
+//!
 //!         Primitive -> Instr {
 //!             '<' => Instr::Left,
 //!             '>' => Instr::Right,
@@ -37,7 +37,7 @@
 //!         }
 //!     }
 //! }
-//! 
+//!
 //! fn main() {
 //!     let parser = parse::Brainfuck::default();
 //!     let src = "--[>--->->->++>-<<<<<-------]>--.>---------.>--..+++.>----.>+++++++++.<<.+++.------.<-.>>+";
@@ -66,11 +66,12 @@ pub trait ParseIt {
     type Output;
 
     /// Parse from a [`ParserState`].
-    fn parse_stream(&self, state: &ParserState<Self::Lexer<'_>>) -> Result<Self::Output, Error>;
+    fn parse_stream(&self, state: &mut ParserState<Self::Lexer<'_>>)
+        -> Result<Self::Output, Error>;
 
     /// Parse from a string.
     fn parse(&self, input: &str) -> Result<Self::Output, Error> {
-        let state = ParserState::new(Self::Lexer::new(input));
-        self.parse_stream(&state)
+        let mut state = ParserState::new(Self::Lexer::new(input));
+        self.parse_stream(&mut state)
     }
 }

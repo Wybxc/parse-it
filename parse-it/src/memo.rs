@@ -48,13 +48,13 @@ impl<P: Clone + Eq + Hash, T: Clone> Memo<P, T> {
 /// It ensures that parsing the same position in the source code only occurs once,
 /// by recording the results of parsing. The memoization is distinguished by the
 /// position itself, so different parsing processes should have their own memos.
-/// 
+///
 /// ["Packrat"]: https://en.wikipedia.org/wiki/Packrat_parser
 #[inline]
 pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
-    state: &ParserState<L>,
+    state: &mut ParserState<L>,
     memo: &Memo<L::Position, T>,
-    parser: impl FnOnce(&ParserState<L>) -> Result<T, Error>,
+    parser: impl FnOnce(&mut ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
     let pos = state.pos();
     if let Some((value, end)) = memo.get(&pos) {
@@ -76,17 +76,17 @@ pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
 ///
 /// The `left_rec` function solves this problem by employing memoization.
 /// The algorithm used is based on this [blog post].
-/// 
+///
 /// ```
 /// # use parse_it::*;
 /// fn parse(
-///     state: &ParserState<CharLexer>, 
+///     state: &mut ParserState<CharLexer>,
 ///     memo: &Memo<usize, Option<String>>,
 /// ) -> Result<String, Error> {
 ///     left_rec(state, memo, |state| {
-///         let fork = state.fork();
-///         if let Ok(mut s) = parse(&fork, memo) {
-///             state.advance_to(&fork);
+///         let fork = &mut state.fork();
+///         if let Ok(mut s) = parse(fork, memo) {
+///             state.advance_to(fork);
 ///             s.push(state.parse('b')?);
 ///             Ok(s)
 ///         } else {
@@ -94,17 +94,17 @@ pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
 ///         }
 ///     })
 /// }
-/// 
-/// let state = ParserState::new(CharLexer::new("abbbb"));
-/// assert_eq!(parse(&state, &Memo::default()).unwrap(), "abbbb");
+///
+/// let mut state = ParserState::new(CharLexer::new("abbbb"));
+/// assert_eq!(parse(&mut state, &Memo::default()).unwrap(), "abbbb");
 /// ```
-/// 
+///
 /// [blog post]:https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
 #[inline]
 pub fn left_rec<'a, L: Lexer<'a>, T: Clone>(
-    state: &ParserState<L>,
+    state: &mut ParserState<L>,
     memo: &Memo<L::Position, Option<T>>,
-    mut parser: impl FnMut(&ParserState<L>) -> Result<T, Error>,
+    mut parser: impl FnMut(&mut ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
     let pos = state.pos();
     if let Some((value, end)) = memo.get(&pos) {
@@ -118,8 +118,8 @@ pub fn left_rec<'a, L: Lexer<'a>, T: Clone>(
         memo.insert(pos, (None, pos));
         let mut last = (None, pos);
         loop {
-            let fork = state.fork();
-            let Ok(value) = parser(&fork) else { break };
+            let mut fork = state.fork();
+            let Ok(value) = parser(&mut fork) else { break };
             let end = fork.pos();
             if end <= last.1 {
                 break;
