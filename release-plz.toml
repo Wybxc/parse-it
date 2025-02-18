@@ -1,0 +1,10 @@
+[workspace]
+# disable the changelog for all packages
+changelog_update = false
+
+# enable the changelog for this package
+[[package]]
+name = "parse-it"
+changelog_update = true
+changelog_path = "./CHANGELOG.md"
+changelog_include = ["parse_it_codegen", "parse_it_macros"]

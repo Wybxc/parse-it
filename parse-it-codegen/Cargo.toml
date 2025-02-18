@@ -1,8 +1,9 @@
 [package]
 name = "parse-it-codegen"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+description = "A user-friendly, opinionated parser generator for Rust."
 
 [dependencies]
 rustc-hash = { workspace = true }
