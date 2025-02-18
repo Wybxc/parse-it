@@ -9,11 +9,7 @@
 //!
 //! [`ParseIt::parse`]: crate::ParseIt::parse
 
-use std::{
-    cell::{Cell, RefCell},
-    fmt::Debug,
-    rc::Rc,
-};
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 use crate::lexer::Lexer;
 
@@ -104,7 +100,7 @@ impl Error {
 /// assert_eq!(parse_option(&mut state, |state| state.parse('b')).unwrap(), None);
 /// ```
 pub struct ParserState<L> {
-    span: Cell<Span>,
+    span: Span,
     lexer: L,
     stack: Rc<RefCell<Vec<(&'static str, usize)>>>,
 }
@@ -113,7 +109,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     /// Create a new parser state from the given lexer.
     pub fn new(lexer: L) -> Self {
         Self {
-            span: Cell::new(Span { start: 0, end: 0 }),
+            span: Span { start: 0, end: 0 },
             lexer,
             stack: Rc::new(RefCell::new(Vec::new())),
         }
@@ -128,11 +124,11 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     fn next(&mut self) -> Option<L::Token> {
         match self.lexer.next() {
             (Some(token), advance) => {
-                let Span { end, .. } = self.span.get();
-                self.span.set(Span {
+                let Span { end, .. } = self.span;
+                self.span = Span {
                     start: end,
                     end: end + advance,
-                });
+                };
                 Some(token)
             }
             _ => None,
@@ -149,7 +145,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
 
     /// Report an error at the current position.
     pub fn error(&self) -> Error {
-        Error::new(self.span.get())
+        Error::new(self.span)
     }
 
     /// Whether the parser is at the end of the input.
@@ -177,7 +173,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     /// Create a fork of the current state for speculative parsing.
     pub fn fork(&self) -> Self {
         Self {
-            span: self.span.clone(),
+            span: self.span,
             lexer: self.lexer.fork(),
             stack: self.stack.clone(),
         }
@@ -185,7 +181,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
 
     /// Push the given name onto the stack (for debugging purposes).
     pub fn push(&self, name: &'static str) {
-        self.stack.borrow_mut().push((name, self.span.get().end));
+        self.stack.borrow_mut().push((name, self.span.end));
     }
 
     /// Pop the last name from the stack (for debugging purposes).
