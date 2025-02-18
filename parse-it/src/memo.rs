@@ -1,13 +1,10 @@
 //! Memoization and left recursion support.
 
-use std::cell::RefCell;
-use std::fmt::Debug;
-use std::hash::Hash;
+use std::{cell::RefCell, fmt::Debug, hash::Hash};
 
 use rustc_hash::FxHashMap;
 
-use crate::lexer::Lexer;
-use crate::{Error, ParserState};
+use crate::{lexer::Lexer, Error, ParserState};
 
 /// Memorization for a parser.
 ///

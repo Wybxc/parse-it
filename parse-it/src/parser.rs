@@ -9,9 +9,11 @@
 //!
 //! [`ParseIt::parse`]: crate::ParseIt::parse
 
-use std::cell::{Cell, RefCell};
-use std::fmt::Debug;
-use std::rc::Rc;
+use std::{
+    cell::{Cell, RefCell},
+    fmt::Debug,
+    rc::Rc,
+};
 
 use crate::lexer::Lexer;
 

@@ -1,8 +1,6 @@
 use std::rc::Rc;
 
-use syn::parse::discouraged::Speculative;
-use syn::punctuated::Punctuated;
-use syn::Token;
+use syn::{parse::discouraged::Speculative, punctuated::Punctuated, Token};
 
 #[derive(Debug)]
 pub struct ParseItConfig {

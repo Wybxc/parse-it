@@ -1,15 +1,14 @@
-use std::rc::Rc;
-use std::vec;
+use std::{rc::Rc, vec};
 
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned, ToTokens};
-use syn::punctuated::Punctuated;
-use syn::visit_mut::VisitMut;
-use syn::Token;
+use syn::{punctuated::Punctuated, visit_mut::VisitMut, Token};
 
-use crate::hash::{HashMap, HashSet, OrderedMap, OrderedSet};
-use crate::middle::{Capture, MemoKind, Middle, ParserImpl, ParserRef, Parsing};
-use crate::syntax::{Atom, ParseIt, Parser, Part, Production, Rule};
+use crate::{
+    hash::{HashMap, HashSet, OrderedMap, OrderedSet},
+    middle::{Capture, MemoKind, Middle, ParserImpl, ParserRef, Parsing},
+    syntax::{Atom, ParseIt, Parser, Part, Production, Rule},
+};
 
 #[derive(Default)]
 struct Context {

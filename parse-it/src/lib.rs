@@ -54,9 +54,11 @@ pub mod parser;
 
 pub use parse_it_macros::parse_it;
 
-pub use crate::lexer::{CharLexer, Lexer};
-pub use crate::memo::{left_rec, memorize, Memo};
-pub use crate::parser::{Error, ParserState};
+pub use crate::{
+    lexer::{CharLexer, Lexer},
+    memo::{left_rec, memorize, Memo},
+    parser::{Error, ParserState},
+};
 
 /// A parser.
 pub trait ParseIt {
