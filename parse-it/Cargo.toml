@@ -8,4 +8,7 @@ license = "Apache-2.0"
 [dependencies]
 parse-it-macros = { version = "0.1.0", path = "../parse-it-macros" }
 rustc-hash = { workspace = true }
-typle = "0.10.6"
+logos = { version = "0.15.0", optional = true }
+
+[features]
+logos = ["dep:logos"]

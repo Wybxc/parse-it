@@ -136,11 +136,18 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     }
 
     /// Consume the next token if it matches the given token.
-    pub fn parse(&mut self, token: L::Token) -> Result<L::Token, Error> {
-        match self.next() {
-            Some(tt) if tt == token => Ok(tt),
-            _ => Err(self.error()),
-        }
+    pub fn parse<T>(&mut self, matches: impl FnOnce(L::Token) -> Option<T>) -> Result<T, Error> {
+        self.next()
+            .and_then(matches)
+            .ok_or_else(|| Error::new(self.span))
+    }
+
+    /// Consume the next token if it matches the given token via [`PartialEq`].
+    pub fn parse_terminal<T>(&mut self, terminal: T) -> Result<L::Token, Error>
+    where
+        L::Token: PartialEq<T>,
+    {
+        self.parse(|tt| tt.eq(&terminal).then_some(tt))
     }
 
     /// Report an error at the current position.

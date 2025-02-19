@@ -92,18 +92,33 @@ impl ParseIt {
             Some(crate_name) => quote! { #crate_name },
             None => quote! { ::parse_it },
         };
-        let mut middle = Middle {
+
+        let mut parsers = Vec::with_capacity(self.parsers.len());
+        for parser in self.parsers {
+            let parser = parser.compile(&mut ctx)?;
+            parsers.push(parser);
+        }
+
+        let mut items = self.items;
+        if !items.iter().any(|item| {
+            if let syn::Item::Type(ty) = item {
+                ty.ident == "Lexer"
+            } else {
+                false
+            }
+        }) {
+            items.push(syn::parse_quote! {
+                type Lexer<'a> = ::parse_it::CharLexer<'a>;
+            });
+        }
+
+        let middle = Middle {
             attrs: self.attrs,
             crate_name,
             mod_name: self.mod_name,
-            items: self.items,
-            parsers: vec![],
+            items,
+            parsers,
         };
-        for parser in self.parsers {
-            let parser = parser.compile(&mut ctx)?;
-            middle.parsers.push(parser);
-        }
-
         Ok(middle)
     }
 
@@ -318,10 +333,8 @@ impl Part {
 impl Atom {
     fn compile(self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
         match self {
-            Atom::Terminal(lit) => match lit {
-                syn::Lit::Char(c) => Ok(Parsing::just(c.value())),
-                _ => Err(quote_spanned! { lit.span() => compile_error!("unsupported literal") })?,
-            },
+            Atom::Terminal(lit) => Ok(Parsing::just(lit)),
+            Atom::PatTerminal(pat) => Ok(Parsing::just_pat(pat)),
             Atom::NonTerminal(name) => {
                 let depends = ctx.depends.get(&name).ok_or_else(|| {
                     quote_spanned! { name.span() => compile_error!("use of undeclared parser") }
@@ -369,7 +382,7 @@ impl Atom {
     /// Whether this atom must make progress when parsing.
     fn must_progress(&self) -> bool {
         match self {
-            Atom::Terminal(_) | Atom::NonTerminal(_) => true,
+            Atom::Terminal(_) | Atom::PatTerminal(_) | Atom::NonTerminal(_) => true,
             Atom::Repeat(_) | Atom::Optional(_) | Atom::LookAhead(_) | Atom::LookAheadNot(_) => {
                 false
             }
@@ -384,7 +397,7 @@ impl Atom {
     /// Whether this atom may make progress when parsing.
     fn may_progress(&self) -> bool {
         match self {
-            Atom::Terminal(_) | Atom::NonTerminal(_) => true,
+            Atom::Terminal(_) | Atom::PatTerminal(_) | Atom::NonTerminal(_) => true,
             Atom::LookAhead(_) | Atom::LookAheadNot(_) => false,
             Atom::Sub(p) => p.may_progress(),
             Atom::Choice(first, rest) => {

@@ -60,6 +60,9 @@ pub use crate::{
     parser::{Error, ParserState},
 };
 
+#[cfg(feature = "logos")]
+pub use crate::lexer::LogosLexer;
+
 /// A parser.
 pub trait ParseIt {
     /// The lexer type.

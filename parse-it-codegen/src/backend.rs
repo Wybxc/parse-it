@@ -39,6 +39,7 @@ impl Capture {
                 let c2 = c2.to_pat()?;
                 Ok(quote! { (#c1, #c2) })
             }
+            Capture::TupleVec(c) => Ok(quote! { (#(#c),*) }),
         }
     }
 }
@@ -116,7 +117,7 @@ impl ParserImpl {
         let parse_impl = quote! {
             fn parse_impl(
                 &self,
-                #state: &mut #crate_name::ParserState<#crate_name::CharLexer>,
+                #state: &mut #crate_name::ParserState<Lexer>,
                 #depends_decl
             ) -> Result<#ret_ty, ::parse_it::Error> {
                 let #curr = self;
@@ -124,11 +125,12 @@ impl ParserImpl {
             }
         };
 
+        let position_ty = quote! { <Lexer<'static> as #crate_name::Lexer<'static>>::Position };
         let memo_decl = match self.memo {
             MemoKind::None => quote! {},
-            MemoKind::Memorize => quote! { memo: #crate_name::Memo<usize, #ret_ty> },
+            MemoKind::Memorize => quote! { memo: #crate_name::Memo<#position_ty, #ret_ty> },
             MemoKind::LeftRec => {
-                quote! { memo: #crate_name::Memo<usize, ::std::option::Option<#ret_ty>> }
+                quote! { memo: #crate_name::Memo<#position_ty, ::std::option::Option<#ret_ty>> }
             }
         };
         let memo_func = match self.memo {
@@ -143,7 +145,7 @@ impl ParserImpl {
         let parse_memo = quote! {
             fn parse_memo(
                 &self,
-                #state: &mut #crate_name::ParserState<#crate_name::CharLexer>,
+                #state: &mut #crate_name::ParserState<Lexer>,
                 #depends_decl
             ) -> Result<#ret_ty, ::parse_it::Error> {
                 #state.push(Self::NAME);
@@ -170,10 +172,10 @@ impl ParserImpl {
             }
 
             impl #crate_name::ParseIt for #name {
-                type Lexer<'a> = #crate_name::CharLexer<'a>;
+                type Lexer<'a> = Lexer<'a>;
                 type Output = #ret_ty;
 
-                fn parse_stream(&self, state: &mut #crate_name::ParserState<#crate_name::CharLexer>) -> Result<#ret_ty, ::parse_it::Error> {
+                fn parse_stream(&self, state: &mut #crate_name::ParserState<Lexer>) -> Result<#ret_ty, ::parse_it::Error> {
                     #depends_def
                     let result = self.parse_memo(state, #depends_use);
                     result
@@ -191,7 +193,13 @@ impl Parsing {
         for (value, op) in self.into_iter() {
             let value = value.to_ident();
             let op = match op {
-                ParseOp::Just(c) => quote! { let #value = #state.parse(#c); },
+                ParseOp::Just(c) => quote! { let #value = #state.parse_terminal(#c); },
+                ParseOp::Pat(p, caps) => quote! {
+                    let #value = #state.parse(|tt| match tt {
+                        #p => Some((#(#caps),*)),
+                        _ => None,
+                    });
+                },
                 ParseOp::Call { parser, depends } => {
                     let parser = parser.as_ident();
                     let depends = depends.iter().map(|d| d.as_ident());

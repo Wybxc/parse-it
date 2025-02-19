@@ -5,9 +5,9 @@ use std::hash::Hash;
 /// A lexer for the parser.
 pub trait Lexer<'a> {
     /// The lexed token type.
-    type Token: Copy + Eq;
+    type Token: Eq;
     /// The position type.
-    type Position: Copy + Eq + Ord + Hash;
+    type Position: Copy + Eq + Ord + Hash + 'static;
 
     /// Create a new lexer from the given input.
     fn new(input: &'a str) -> Self;
@@ -79,6 +79,55 @@ impl<'a> Lexer<'a> for CharLexer<'a> {
         Self {
             pos: self.pos,
             remaining: self.remaining,
+        }
+    }
+}
+
+#[cfg(feature = "logos")]
+pub struct LogosLexer<'a, Token>
+where
+    Token: logos::Logos<'a>,
+{
+    lexer: logos::Lexer<'a, Token>,
+}
+
+#[cfg(feature = "logos")]
+impl<'a, Token> Lexer<'a> for LogosLexer<'a, Token>
+where
+    Token: logos::Logos<'a, Source = str> + Clone + Eq,
+    Token::Extras: Default + Clone,
+{
+    type Token = Token;
+
+    type Position = usize;
+
+    fn new(input: &'a str) -> Self {
+        let lexer = logos::Lexer::new(input);
+        Self { lexer }
+    }
+
+    fn pos(&self) -> Self::Position {
+        self.lexer.span().start
+    }
+
+    fn next(&mut self) -> (Option<Self::Token>, usize) {
+        let pos = self.pos();
+        let token = self.lexer.next().into_iter().flatten().next();
+        (token, self.pos() - pos)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.lexer.remainder().is_empty()
+    }
+
+    fn advance_to_pos(&mut self, pos: Self::Position) {
+        let advance = pos - self.pos();
+        self.lexer.bump(advance);
+    }
+
+    fn fork(&self) -> Self {
+        Self {
+            lexer: self.lexer.clone(),
         }
     }
 }

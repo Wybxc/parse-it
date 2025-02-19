@@ -1,7 +1,7 @@
-use hashlink::LinkedHashMap;
+use hashlink::{LinkedHashMap, LinkedHashSet};
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned};
-use syn::spanned::Spanned;
+use syn::{spanned::Spanned, visit::Visit};
 
 use crate::hash::OrderedMap;
 
@@ -27,12 +27,37 @@ impl Value {
     }
 }
 
+pub struct PatVistor {
+    pub captures: LinkedHashSet<syn::Ident>,
+}
+
+impl PatVistor {
+    pub fn new() -> Self {
+        Self {
+            captures: LinkedHashSet::default(),
+        }
+    }
+
+    pub fn collect_captures(pat: &syn::Pat) -> LinkedHashSet<syn::Ident> {
+        let mut visitor = Self::new();
+        visitor.visit_pat(pat);
+        visitor.captures
+    }
+}
+
+impl Visit<'_> for PatVistor {
+    fn visit_pat_ident(&mut self, i: &syn::PatIdent) {
+        self.captures.insert(i.ident.clone());
+    }
+}
+
 #[derive(Clone)]
 pub enum Capture {
     Loud,
     Slient,
     Named(Box<syn::Pat>, Box<Capture>),
     Tuple(Box<Capture>, Box<Capture>),
+    TupleVec(Vec<syn::Ident>),
 }
 
 impl Capture {
@@ -42,6 +67,7 @@ impl Capture {
             Capture::Slient => false,
             Capture::Named(_, _) => true,
             Capture::Tuple(_, n) => n.is_loud(),
+            Capture::TupleVec(_) => true,
         }
     }
 
@@ -111,8 +137,17 @@ impl Parsing {
         self
     }
 
-    pub fn just(c: char) -> Self {
+    pub fn just(c: syn::Lit) -> Self {
         Self::from_op(ParseOp::Just(c), Capture::Slient)
+    }
+
+    pub fn just_pat(p: syn::Pat) -> Self {
+        let captures = PatVistor::collect_captures(&p);
+        let captures: Vec<syn::Ident> = captures.into_iter().collect();
+        Self::from_op(
+            ParseOp::Pat(p.clone(), captures.clone()),
+            Capture::TupleVec(captures),
+        )
     }
 
     pub fn call(name: syn::Ident, depends: impl Iterator<Item = ParserRef>) -> Self {
@@ -212,9 +247,16 @@ impl Parsing {
 
 pub enum ParseOp {
     /// ```ignore
-    /// {state}.char({0})
+    /// {state}.parse_terminal({lit})
     /// ```
-    Just(char),
+    Just(syn::Lit),
+    /// ```ignore
+    /// {state}.parse(|tt| match tt {
+    ///     {pat} => Some(({..cap})),
+    ///     _ => None,
+    /// })
+    /// ```
+    Pat(syn::Pat, Vec<syn::Ident>),
     /// ```ignore
     /// {parser}.parse_memo({state}, {..depends})
     /// ```

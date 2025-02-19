@@ -5,5 +5,5 @@ members = ["parse-it", "parse-it-macros", "parse-it-codegen"]
 [workspace.dependencies]
 proc-macro2 = "1.0.93"
 quote = "1.0.38"
-syn = { version = "2.0.98", features = ["full", "extra-traits", "visit-mut"] }
+syn = { version = "2.0.98", features = ["full", "extra-traits", "visit", "visit-mut"] }
 rustc-hash = "2.1.1"

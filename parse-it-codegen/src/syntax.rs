@@ -268,6 +268,7 @@ impl syn::parse::Parse for Part {
 #[derive(Debug)]
 pub enum Atom {
     Terminal(syn::Lit),
+    PatTerminal(syn::Pat),
     NonTerminal(syn::Ident),
     Sub(Box<Production>),
     Choice(Box<Production>, Vec<Production>),
@@ -301,10 +302,21 @@ impl syn::parse::Parse for Atom {
             // Atom ::= Terminal
             Atom::Terminal(input.parse()?)
         } else if lookahead.peek(syn::Ident) {
-            // Atom ::= NonTerminal
-            Atom::NonTerminal(input.parse()?)
+            let fork = input.fork();
+            if let Ok(pat) = fork.call(syn::Pat::parse_single) {
+                if matches!(&pat, syn::Pat::Ident(_)) {
+                    // Atom ::= NonTerminal
+                    Atom::NonTerminal(input.parse()?)
+                } else {
+                    // Atom ::= PatTerminal
+                    input.advance_to(&fork);
+                    Atom::PatTerminal(pat)
+                }
+            } else {
+                Err(lookahead.error())?
+            }
         } else {
-            return Err(lookahead.error());
+            Err(lookahead.error())?
         };
 
         Ok(atom)
