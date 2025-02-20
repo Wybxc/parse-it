@@ -50,6 +50,7 @@ fn main() {
 
 - [x] Parser generation
 - [ ] Lexer generation
+  - [x] Integration with the [`logos`](https://logos.maciej.codes/) crate
 - [ ] Error reporting
 - [ ] Error recovery
 - [ ] Grammar lints
