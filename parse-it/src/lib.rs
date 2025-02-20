@@ -54,14 +54,13 @@ pub mod parser;
 
 pub use parse_it_macros::parse_it;
 
+#[cfg(feature = "logos")]
+pub use crate::lexer::LogosLexer;
 pub use crate::{
     lexer::{CharLexer, Lexer},
     memo::{left_rec, memorize, Memo},
     parser::{Error, ParserState},
 };
-
-#[cfg(feature = "logos")]
-pub use crate::lexer::LogosLexer;
 
 /// A parser.
 pub trait ParseIt {

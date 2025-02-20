@@ -9,6 +9,7 @@ use crate::{
 
 pub struct Context {
     crate_name: TokenStream,
+    debug: bool,
 }
 
 impl Value {
@@ -49,6 +50,7 @@ impl Middle {
         let mut result = TokenStream::new();
         let ctx = Context {
             crate_name: self.crate_name,
+            debug: self.debug,
         };
         let mut ret_ty = HashMap::default();
         let mut depends = HashMap::default();
@@ -142,15 +144,31 @@ impl ParserImpl {
                 quote! { #crate_name::left_rec(#state, &self.memo, |state| self.parse_impl(state, #depends_use)) }
             }
         };
+        let debug_push = if ctx.debug {
+            quote! { #state.push(Self::NAME); }
+        } else {
+            quote! {}
+        };
+        let debug_print = if ctx.debug {
+            quote! { eprintln!("{}: {:?}", Self::NAME, result); }
+        } else {
+            quote! {}
+        };
+        let debug_pop = if ctx.debug {
+            quote! { #state.pop(); }
+        } else {
+            quote! {}
+        };
         let parse_memo = quote! {
             fn parse_memo(
                 &self,
                 #state: &mut #crate_name::ParserState<Lexer>,
                 #depends_decl
             ) -> Result<#ret_ty, ::parse_it::Error> {
-                #state.push(Self::NAME);
+                #debug_push
                 let result = #memo_func;
-                #state.pop();
+                #debug_print
+                #debug_pop
                 result
             }
         };

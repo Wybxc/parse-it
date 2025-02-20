@@ -84,10 +84,10 @@ pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
 ///         let fork = &mut state.fork();
 ///         if let Ok(mut s) = parse(fork, memo) {
 ///             state.advance_to(fork);
-///             s.push(state.parse('b')?);
+///             s.push(state.parse_terminal('b')?);
 ///             Ok(s)
 ///         } else {
-///             state.parse('a').map(|_| String::from("a"))
+///             state.parse_terminal('a').map(|_| String::from("a"))
 ///         }
 ///     })
 /// }

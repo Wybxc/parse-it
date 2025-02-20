@@ -118,6 +118,7 @@ impl ParseIt {
             mod_name: self.mod_name,
             items,
             parsers,
+            debug: self.config.debug,
         };
         Ok(middle)
     }

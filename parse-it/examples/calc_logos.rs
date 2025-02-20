@@ -34,7 +34,7 @@ pub enum Token {
 
 impl PartialEq<char> for Token {
     fn eq(&self, other: &char) -> bool {
-        match self {
+        match dbg!(self) {
             Token::Plus => *other == '+',
             Token::Minus => *other == '-',
             Token::Mul => *other == '*',
@@ -49,6 +49,7 @@ impl PartialEq<char> for Token {
 }
 
 parse_it::parse_it! {
+    #[parse_it(debug = true)]
     mod parse {
         use super::Token;
 

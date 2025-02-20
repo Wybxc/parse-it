@@ -389,4 +389,5 @@ pub struct Middle {
     pub mod_name: syn::Ident,
     pub items: Vec<syn::Item>,
     pub parsers: Vec<ParserImpl>,
+    pub debug: bool,
 }

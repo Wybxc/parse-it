@@ -6,6 +6,7 @@ use syn::{parse::discouraged::Speculative, punctuated::Punctuated, Token};
 pub struct ParseItConfig {
     pub crate_name: Option<syn::Path>,
     pub parse_macros: Rc<Vec<syn::Path>>,
+    pub debug: bool,
 }
 
 impl Default for ParseItConfig {
@@ -20,6 +21,7 @@ impl Default for ParseItConfig {
                 syn::parse_quote! { format },
                 syn::parse_quote! { dbg },
             ]),
+            debug: false,
         }
     }
 }
@@ -61,6 +63,10 @@ impl syn::parse::Parse for ParseIt {
                                 .into_iter()
                                 .collect(),
                         );
+                    } else if meta.path.is_ident("debug") {
+                        let value = meta.value()?;
+                        let value = value.parse::<syn::LitBool>()?;
+                        config.debug = value.value;
                     } else {
                         Err(syn::Error::new_spanned(meta.path, "unknown attribute"))?
                     }
