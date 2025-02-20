@@ -247,7 +247,7 @@ impl Parsing {
 
 pub enum ParseOp {
     /// ```ignore
-    /// {state}.parse_terminal({lit})
+    /// {state}.parse({lit})
     /// ```
     Just(syn::Lit),
     /// ```ignore

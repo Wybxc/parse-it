@@ -211,9 +211,9 @@ impl Parsing {
         for (value, op) in self.into_iter() {
             let value = value.to_ident();
             let op = match op {
-                ParseOp::Just(c) => quote! { let #value = #state.parse_terminal(#c); },
+                ParseOp::Just(c) => quote! { let #value = #state.parse(#c); },
                 ParseOp::Pat(p, caps) => quote! {
-                    let #value = #state.parse(|tt| match tt {
+                    let #value = #state.parse_with(|tt| match tt {
                         #p => Some((#(#caps),*)),
                         _ => None,
                     });

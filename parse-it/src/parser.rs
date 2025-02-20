@@ -52,9 +52,9 @@ impl Error {
 /// ```
 /// # use parse_it::*;
 /// fn parse_abc(state: &mut ParserState<CharLexer>) -> Result<char, Error> {
-///     state.parse_terminal('a')?;
-///     state.parse_terminal('b')?;
-///     state.parse_terminal('c')?;
+///     state.parse('a')?;
+///     state.parse('b')?;
+///     state.parse('c')?;
 ///     Ok('c')
 /// }
 ///
@@ -96,8 +96,8 @@ impl Error {
 /// }
 ///
 /// let mut state = ParserState::new(CharLexer::new("aaa"));
-/// assert_eq!(parse_option(&mut state, |state| state.parse_terminal('a')).unwrap(), Some('a'));
-/// assert_eq!(parse_option(&mut state, |state| state.parse_terminal('b')).unwrap(), None);
+/// assert_eq!(parse_option(&mut state, |state| state.parse('a')).unwrap(), Some('a'));
+/// assert_eq!(parse_option(&mut state, |state| state.parse('b')).unwrap(), None);
 /// ```
 pub struct ParserState<L> {
     span: Span,
@@ -136,18 +136,18 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     }
 
     /// Consume the next token if it matches the given token.
-    pub fn parse<T>(&mut self, matches: impl FnOnce(L::Token) -> Option<T>) -> Result<T, Error> {
+    pub fn parse_with<T>(&mut self, matches: impl FnOnce(L::Token) -> Option<T>) -> Result<T, Error> {
         self.next()
             .and_then(matches)
             .ok_or_else(|| Error::new(self.span))
     }
 
     /// Consume the next token if it matches the given token via [`PartialEq`].
-    pub fn parse_terminal<T>(&mut self, terminal: T) -> Result<L::Token, Error>
+    pub fn parse<T>(&mut self, terminal: T) -> Result<L::Token, Error>
     where
         L::Token: PartialEq<T>,
     {
-        self.parse(|tt| tt.eq(&terminal).then_some(tt))
+        self.parse_with(|tt| tt.eq(&terminal).then_some(tt))
     }
 
     /// Report an error at the current position.
