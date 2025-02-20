@@ -10,6 +10,12 @@ pub enum Token {
     #[token("-")]
     Minus,
 
+    #[token("*")]
+    Mul,
+
+    #[token("/")]
+    Div,
+
     #[token(">")]
     Right,
 
@@ -31,6 +37,8 @@ impl PartialEq<char> for Token {
         match self {
             Token::Plus => *other == '+',
             Token::Minus => *other == '-',
+            Token::Mul => *other == '*',
+            Token::Div => *other == '/',
             Token::Right => *other == '>',
             Token::Left => *other == '<',
             Token::LParen => *other == '(',

@@ -84,6 +84,7 @@ impl<'a> Lexer<'a> for CharLexer<'a> {
 }
 
 #[cfg(feature = "logos")]
+/// A lexer integrated with the `logos` crate.
 pub struct LogosLexer<'a, Token>
 where
     Token: logos::Logos<'a>,
