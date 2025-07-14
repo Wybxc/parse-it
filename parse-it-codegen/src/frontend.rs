@@ -7,7 +7,7 @@ use syn::{punctuated::Punctuated, visit_mut::VisitMut, Token};
 use crate::{
     hash::{HashMap, HashSet, OrderedMap, OrderedSet},
     middle::{Capture, MemoKind, Middle, ParserImpl, ParserRef, Parsing},
-    syntax::{Atom, ParseIt, Parser, Part, Production, Rule},
+    syntax::{Atom, Parser, ParserMod, Part, Production, Rule},
 };
 
 #[derive(Default)]
@@ -78,7 +78,7 @@ impl VisitMut for ExprVisitor {
     }
 }
 
-impl ParseIt {
+impl ParserMod {
     pub fn compile(self) -> Result<Middle, TokenStream> {
         let mut ctx = Context {
             parse_macros: self.config.parse_macros.clone(),

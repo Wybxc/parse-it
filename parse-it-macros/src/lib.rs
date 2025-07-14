@@ -1,14 +1,26 @@
-use parse_it_codegen::syntax::ParseIt;
+use parse_it_codegen::syntax::{Mod, ParseIt};
 
 #[proc_macro]
 pub fn parse_it(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(input as ParseIt);
-    let middle = match input.compile() {
-        Ok(middle) => middle,
-        Err(msg) => return msg.into(),
-    };
-    match middle.expand() {
-        Ok(expanded) => expanded.into(),
-        Err(msg) => msg.into(),
+    let mut result = proc_macro::TokenStream::new();
+    for submod in input.mods {
+        match submod {
+            Mod::Parser(parser_mod) => {
+                let middle = match parser_mod.compile() {
+                    Ok(middle) => middle,
+                    Err(msg) => return msg.into(),
+                };
+                let tokens: proc_macro::TokenStream = match middle.expand() {
+                    Ok(expanded) => expanded.into(),
+                    Err(msg) => return msg.into(),
+                };
+                result.extend(tokens);
+            }
+            Mod::Common(item_mod) => {
+                result.extend(proc_macro::TokenStream::from(quote::quote! { #item_mod }));
+            },
+        }
     }
+    result
 }

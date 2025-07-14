@@ -14,6 +14,7 @@ pub enum Instr {
 }
 
 parse_it::parse_it! {
+    #[parser]
     mod parse {
         use super::Instr;
 

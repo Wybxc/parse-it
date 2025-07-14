@@ -19,6 +19,7 @@
 //! }
 //!
 //! parse_it! {
+//!     #[parser]
 //!     mod parse {
 //!         use super::Instr;
 //!

@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
-use syn::{parse::discouraged::Speculative, punctuated::Punctuated, Token};
+use syn::{parse::discouraged::Speculative, punctuated::Punctuated, Attribute, Token};
 
 #[derive(Debug)]
-pub struct ParseItConfig {
+pub struct ParserConfig {
     pub crate_name: Option<syn::Path>,
     pub parse_macros: Rc<Vec<syn::Path>>,
     pub debug: bool,
 }
 
-impl Default for ParseItConfig {
+impl Default for ParserConfig {
     fn default() -> Self {
         Self {
             crate_name: None,
@@ -28,18 +28,89 @@ impl Default for ParseItConfig {
 
 #[derive(Debug)]
 pub struct ParseIt {
-    pub attrs: Vec<syn::Attribute>,
-    pub mod_name: syn::Ident,
-    pub items: Vec<syn::Item>,
-    pub parsers: Vec<Parser>,
-    pub config: ParseItConfig,
+    pub mods: Vec<Mod>,
 }
 
 impl syn::parse::Parse for ParseIt {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut config = ParseItConfig::default();
-        let mut attrs = vec![];
-        for attr in input.call(syn::Attribute::parse_outer)? {
+        let mut mods = vec![];
+        while !input.is_empty() {
+            let fork = input.fork();
+            let mut attrs = input.call(syn::Attribute::parse_outer)?;
+
+            input.parse::<Token![mod]>()?;
+            let mod_name = input.parse::<syn::Ident>()?;
+
+            let content;
+            syn::braced!(content in input);
+
+            #[derive(Clone, Copy, PartialEq, Eq)]
+            enum ModType {
+                Parser,
+                Lexer,
+                Common,
+            }
+            let mut mod_types = vec![];
+            attrs.retain(|attr| {
+                if attr.path().is_ident("parser") {
+                    mod_types.push(ModType::Parser);
+                    return false;
+                } else if attr.path().is_ident("lexer") {
+                    mod_types.push(ModType::Lexer);
+                    return false;
+                }
+                true
+            });
+            let mod_type = if mod_types.is_empty() {
+                ModType::Common
+            } else if mod_types.len() == 1 {
+                mod_types[0]
+            } else {
+                return Err(syn::Error::new_spanned(
+                    mod_name,
+                    "module can only be marked as parser or lexer, not both",
+                ));
+            };
+            match mod_type {
+                ModType::Parser => {
+                    let parser_mod = ParserMod::parse(attrs, mod_name, &content)?;
+                    mods.push(Mod::Parser(parser_mod));
+                }
+                ModType::Lexer => todo!(),
+                ModType::Common => {
+                    mods.push(Mod::Common(fork.parse::<syn::ItemMod>()?));
+                    input.advance_to(&fork);
+                }
+            }
+        }
+        Ok(Self { mods })
+    }
+}
+
+#[derive(Debug)]
+pub enum Mod {
+    Parser(ParserMod),
+    Common(syn::ItemMod),
+}
+
+#[derive(Debug)]
+pub struct ParserMod {
+    pub attrs: Vec<syn::Attribute>,
+    pub mod_name: syn::Ident,
+    pub items: Vec<syn::Item>,
+    pub parsers: Vec<Parser>,
+    pub config: ParserConfig,
+}
+
+impl ParserMod {
+    fn parse(
+        attrs: Vec<Attribute>,
+        mod_name: syn::Ident,
+        content: syn::parse::ParseStream,
+    ) -> syn::Result<Self> {
+        let mut config = ParserConfig::default();
+        let mut common_attrs = vec![];
+        for attr in attrs {
             if attr.path().is_ident("parse_it") {
                 attr.parse_nested_meta(|meta| {
                     if meta.path.is_ident("crate") {
@@ -73,15 +144,10 @@ impl syn::parse::Parse for ParseIt {
                     Ok(())
                 })?;
             } else {
-                attrs.push(attr);
+                common_attrs.push(attr);
             }
         }
 
-        input.parse::<Token![mod]>()?;
-        let mod_name = input.parse::<syn::Ident>()?;
-
-        let content;
-        syn::braced!(content in input);
         let mut parsers = vec![];
         let mut items = vec![];
         while !content.is_empty() {
@@ -94,8 +160,8 @@ impl syn::parse::Parse for ParseIt {
                 items.push(item);
             }
         }
-        Ok(ParseIt {
-            attrs,
+        Ok(Self {
+            attrs: common_attrs,
             items,
             mod_name,
             parsers,
