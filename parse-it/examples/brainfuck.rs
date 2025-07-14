@@ -39,7 +39,7 @@ fn main() {
 
     match parser.parse(src) {
         Ok(ast) => execute(&ast, &mut 0, &mut [0; TAPE_LEN]),
-        Err(err) => println!("{:?}", err),
+        Err(err) => println!("{err:?}"),
     };
 }
 

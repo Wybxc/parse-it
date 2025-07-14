@@ -91,5 +91,6 @@ fn main() {
     let input = "1 + 2 * (3 - 4)";
     let parser = parse::Expr::default();
     let result = parser.parse(input).unwrap();
-    println!("{:?}", result);
+    println!("{result}");
+    assert_eq!(result, 1 + 2 * (3 - 4));
 }

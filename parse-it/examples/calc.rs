@@ -55,6 +55,6 @@ fn main() {
         }
     };
 
-    println!("parser: {}", result);
+    println!("parser: {result}");
     assert_eq!(result, 15);
 }
