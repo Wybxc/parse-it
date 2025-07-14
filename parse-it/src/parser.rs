@@ -11,16 +11,7 @@
 
 use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
-use crate::lexer::Lexer;
-
-/// A span in the source code.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Span {
-    /// The start of the span, inclusive
-    pub start: usize,
-    /// The end of the span, exclusive
-    pub end: usize,
-}
+use crate::lexer::{Lexer, Span};
 
 /// An error that occurred during parsing.
 #[derive(Debug)]
@@ -100,7 +91,6 @@ impl Error {
 /// assert_eq!(parse_option(&mut state, |state| state.parse('b')).unwrap(), None);
 /// ```
 pub struct ParserState<L> {
-    span: Span,
     lexer: L,
     stack: Rc<RefCell<Vec<(&'static str, usize)>>>,
 }
@@ -109,37 +99,29 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     /// Create a new parser state from the given lexer.
     pub fn new(lexer: L) -> Self {
         Self {
-            span: Span { start: 0, end: 0 },
             lexer,
             stack: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
     /// Get the current parsing position.
-    pub fn pos(&self) -> L::Position {
+    pub fn pos(&self) -> &L::Position {
         self.lexer.pos()
     }
 
     /// Advance to the next token.
     fn next(&mut self) -> Option<L::Token> {
-        match self.lexer.next() {
-            (Some(token), advance) => {
-                let Span { end, .. } = self.span;
-                self.span = Span {
-                    start: end,
-                    end: end + advance,
-                };
-                Some(token)
-            }
-            _ => None,
-        }
+        self.lexer.next()
     }
 
     /// Consume the next token if it matches the given token.
-    pub fn parse_with<T>(&mut self, matches: impl FnOnce(L::Token) -> Option<T>) -> Result<T, Error> {
+    pub fn parse_with<T>(
+        &mut self,
+        matches: impl FnOnce(L::Token) -> Option<T>,
+    ) -> Result<T, Error> {
         self.next()
             .and_then(matches)
-            .ok_or_else(|| Error::new(self.span))
+            .ok_or_else(|| Error::new(self.lexer.span()))
     }
 
     /// Consume the next token if it matches the given token via [`PartialEq`].
@@ -152,7 +134,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
 
     /// Report an error at the current position.
     pub fn error(&self) -> Error {
-        Error::new(self.span)
+        Error::new(self.lexer.span())
     }
 
     /// Whether the parser is at the end of the input.
@@ -172,7 +154,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     ///
     /// # Panics
     /// Panics if the given position is before the current position.
-    pub fn advance_to_pos(&mut self, pos: L::Position) {
+    pub fn advance_to_pos(&mut self, pos: &L::Position) {
         assert!(pos >= self.lexer.pos(), "you cannot rewind");
         self.lexer.advance_to_pos(pos);
     }
@@ -180,7 +162,6 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     /// Create a fork of the current state for speculative parsing.
     pub fn fork(&self) -> Self {
         Self {
-            span: self.span,
             lexer: self.lexer.fork(),
             stack: self.stack.clone(),
         }
@@ -188,7 +169,7 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
 
     /// Push the given name onto the stack (for debugging purposes).
     pub fn push(&self, name: &'static str) {
-        self.stack.borrow_mut().push((name, self.span.end));
+        self.stack.borrow_mut().push((name, self.lexer.span().end));
     }
 
     /// Pop the last name from the stack (for debugging purposes).

@@ -53,13 +53,13 @@ pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
     memo: &Memo<L::Position, T>,
     parser: impl FnOnce(&mut ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let pos = state.pos();
+    let pos = state.pos().clone();
     if let Some((value, end)) = memo.get(&pos) {
-        state.advance_to_pos(end);
+        state.advance_to_pos(&end);
         Ok(value.clone())
     } else {
         let value = parser(state)?;
-        let end = state.pos();
+        let end = state.pos().clone();
         memo.insert(pos, (value.clone(), end));
         Ok(value)
     }
@@ -103,28 +103,28 @@ pub fn left_rec<'a, L: Lexer<'a>, T: Clone>(
     memo: &Memo<L::Position, Option<T>>,
     mut parser: impl FnMut(&mut ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let pos = state.pos();
+    let pos = state.pos().clone();
     if let Some((value, end)) = memo.get(&pos) {
-        state.advance_to_pos(end);
+        state.advance_to_pos(&end);
         if let Some(value) = value {
             Ok(value.clone())
         } else {
             Err(state.error())
         }
     } else {
-        memo.insert(pos, (None, pos));
-        let mut last = (None, pos);
+        memo.insert(pos.clone(), (None, pos.clone()));
+        let mut last = (None, pos.clone());
         loop {
             let mut fork = state.fork();
             let Ok(value) = parser(&mut fork) else { break };
             let end = fork.pos();
-            if end <= last.1 {
+            if end <= &last.1 {
                 break;
             }
-            last = (Some(value), end);
-            memo.insert(pos, last.clone());
+            last = (Some(value), end.clone());
+            memo.insert(pos.clone(), last.clone());
         }
-        state.advance_to_pos(last.1);
+        state.advance_to_pos(&last.1);
         last.0.ok_or_else(|| state.error())
     }
 }
