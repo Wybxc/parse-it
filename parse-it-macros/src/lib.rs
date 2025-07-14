@@ -17,9 +17,6 @@ pub fn parse_it(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 };
                 result.extend(tokens);
             }
-            Mod::Common(item_mod) => {
-                result.extend(proc_macro::TokenStream::from(quote::quote! { #item_mod }));
-            },
         }
     }
     result

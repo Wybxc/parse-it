@@ -35,7 +35,6 @@ impl syn::parse::Parse for ParseIt {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut mods = vec![];
         while !input.is_empty() {
-            let fork = input.fork();
             let mut attrs = input.call(syn::Attribute::parse_outer)?;
 
             input.parse::<Token![mod]>()?;
@@ -48,7 +47,6 @@ impl syn::parse::Parse for ParseIt {
             enum ModType {
                 Parser,
                 Lexer,
-                Common,
             }
             let mut mod_types = vec![];
             attrs.retain(|attr| {
@@ -62,7 +60,10 @@ impl syn::parse::Parse for ParseIt {
                 true
             });
             let mod_type = if mod_types.is_empty() {
-                ModType::Common
+                return Err(syn::Error::new_spanned(
+                    mod_name,
+                    "module must be marked as parser or lexer",
+                ));
             } else if mod_types.len() == 1 {
                 mod_types[0]
             } else {
@@ -77,10 +78,6 @@ impl syn::parse::Parse for ParseIt {
                     mods.push(Mod::Parser(parser_mod));
                 }
                 ModType::Lexer => todo!(),
-                ModType::Common => {
-                    mods.push(Mod::Common(fork.parse::<syn::ItemMod>()?));
-                    input.advance_to(&fork);
-                }
             }
         }
         Ok(Self { mods })
@@ -90,7 +87,6 @@ impl syn::parse::Parse for ParseIt {
 #[derive(Debug)]
 pub enum Mod {
     Parser(ParserMod),
-    Common(syn::ItemMod),
 }
 
 #[derive(Debug)]
