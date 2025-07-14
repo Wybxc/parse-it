@@ -1,10 +1,10 @@
 [package]
 name = "parse-it"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A user-friendly, opinionated parser generator for Rust."
 license = "Apache-2.0"
 
 [dependencies]
-parse-it-macros = { version = "0.1.0", path = "../parse-it-macros" }
+parse-it-macros = { version = "0.1.1", path = "../parse-it-macros" }
 rustc-hash = { workspace = true }
