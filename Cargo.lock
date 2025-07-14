@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "parse-it"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "parse-it-macros",
  "rustc-hash",
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "parse-it-codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hashlink",
  "proc-macro2",
@@ -47,7 +47,7 @@ dependencies = [
 
 [[package]]
 name = "parse-it-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "parse-it-codegen",
  "proc-macro2",
