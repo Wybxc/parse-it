@@ -6,7 +6,7 @@ use syn::{punctuated::Punctuated, visit_mut::VisitMut, Token};
 
 use crate::{
     hash::{HashMap, HashSet, OrderedMap, OrderedSet},
-    middle::{Capture, MemoKind, Middle, ParserImpl, ParserRef, Parsing},
+    parser::middle::{Capture, MemoKind, Middle, ParserImpl, ParserRef, Parsing},
     syntax::{Atom, Parser, ParserMod, Part, Production, Rule},
 };
 

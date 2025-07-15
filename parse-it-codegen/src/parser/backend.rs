@@ -4,7 +4,7 @@ use syn::spanned::Spanned;
 
 use crate::{
     hash::HashMap,
-    middle::{Capture, MemoKind, Middle, ParseOp, ParserImpl, Parsing, Value},
+    parser::middle::{Capture, MemoKind, Middle, ParseOp, ParserImpl, Parsing, Value},
 };
 
 pub struct Context {
