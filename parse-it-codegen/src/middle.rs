@@ -150,11 +150,11 @@ impl Parsing {
         )
     }
 
-    pub fn call(name: syn::Ident, depends: impl Iterator<Item = ParserRef>) -> Self {
+    pub fn call(name: syn::Ident, depends: Vec<ParserRef>) -> Self {
         Self::from_op(
             ParseOp::Call {
                 parser: ParserRef::new(&name),
-                depends: depends.collect(),
+                depends,
             },
             Capture::Loud,
         )

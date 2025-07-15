@@ -340,7 +340,7 @@ impl Atom {
                 let depends = ctx.depends.get(&name).ok_or_else(|| {
                     quote_spanned! { name.span() => compile_error!("use of undeclared parser") }
                 })?;
-                let depends = depends.iter().map(|(_, p)| p.clone());
+                let depends = depends.iter().map(|(_, p)| p.clone()).collect();
                 Ok(Parsing::call(name, depends))
             }
             Atom::Sub(p) => p.compile(ctx),
