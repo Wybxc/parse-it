@@ -298,6 +298,18 @@ impl syn::parse::Parse for Part {
             false
         };
 
+        let lookahead = if input.peek(Token![&]) {
+            // Choice ::= ... '&' Atom ...
+            input.parse::<Token![&]>()?;
+            Some(true)
+        } else if input.peek(Token![!]) {
+            // Choice ::= ... '!' Atom ...
+            input.parse::<Token![!]>()?;
+            Some(false)
+        } else {
+            None
+        };
+
         let atom = input.parse::<Atom>()?;
         let part = if input.peek(Token![*]) {
             // Choice ::= ... Atom '*'
@@ -313,6 +325,16 @@ impl syn::parse::Parse for Part {
             Atom::Optional(Box::new(atom))
         } else {
             atom
+        };
+
+        let part = if let Some(lookahead) = lookahead {
+            if lookahead {
+                Atom::LookAhead(Box::new(part))
+            } else {
+                Atom::LookAheadNot(Box::new(part))
+            }
+        } else {
+            part
         };
 
         let capture = if let Some(capture) = capture {
