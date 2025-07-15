@@ -1,4 +1,5 @@
 use parse_it_codegen::syntax::{Mod, ParseIt};
+use quote::quote;
 
 #[proc_macro]
 pub fn parse_it(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -16,6 +17,14 @@ pub fn parse_it(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     Err(msg) => return msg.into(),
                 };
                 result.extend(tokens);
+            }
+            Mod::Lexer(lexer_mod) => {
+                let debug = format!("{lexer_mod:#?}");
+                result.extend(proc_macro::TokenStream::from(quote! {
+                    mod lex {
+                        const DEBUG: &str = #debug;
+                    }
+                }));
             }
         }
     }

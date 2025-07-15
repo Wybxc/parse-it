@@ -3,30 +3,6 @@ use std::rc::Rc;
 use syn::{parse::discouraged::Speculative, punctuated::Punctuated, Attribute, Token};
 
 #[derive(Debug)]
-pub struct ParserConfig {
-    pub crate_name: Option<syn::Path>,
-    pub parse_macros: Rc<Vec<syn::Path>>,
-    pub debug: bool,
-}
-
-impl Default for ParserConfig {
-    fn default() -> Self {
-        Self {
-            crate_name: None,
-            parse_macros: Rc::new(vec![
-                syn::parse_quote! { print },
-                syn::parse_quote! { println },
-                syn::parse_quote! { eprint },
-                syn::parse_quote! { eprintln },
-                syn::parse_quote! { format },
-                syn::parse_quote! { dbg },
-            ]),
-            debug: false,
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct ParseIt {
     pub mods: Vec<Mod>,
 }
@@ -77,7 +53,10 @@ impl syn::parse::Parse for ParseIt {
                     let parser_mod = ParserMod::parse(attrs, mod_name, &content)?;
                     mods.push(Mod::Parser(parser_mod));
                 }
-                ModType::Lexer => todo!(),
+                ModType::Lexer => {
+                    let lexer_mod = LexerMod::parse(attrs, mod_name, &content)?;
+                    mods.push(Mod::Lexer(lexer_mod));
+                }
             }
         }
         Ok(Self { mods })
@@ -87,6 +66,31 @@ impl syn::parse::Parse for ParseIt {
 #[derive(Debug)]
 pub enum Mod {
     Parser(ParserMod),
+    Lexer(LexerMod),
+}
+
+#[derive(Debug)]
+pub struct ParserConfig {
+    pub crate_name: Option<syn::Path>,
+    pub parse_macros: Rc<Vec<syn::Path>>,
+    pub debug: bool,
+}
+
+impl Default for ParserConfig {
+    fn default() -> Self {
+        Self {
+            crate_name: None,
+            parse_macros: Rc::new(vec![
+                syn::parse_quote! { print },
+                syn::parse_quote! { println },
+                syn::parse_quote! { eprint },
+                syn::parse_quote! { eprintln },
+                syn::parse_quote! { format },
+                syn::parse_quote! { dbg },
+            ]),
+            debug: false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -410,6 +414,163 @@ impl syn::parse::Parse for Atom {
         };
 
         Ok(atom)
+    }
+}
+
+#[derive(Debug)]
+pub struct LexerConfig {
+    pub crate_name: Option<syn::Path>,
+    pub parse_macros: Rc<Vec<syn::Path>>,
+    pub debug: bool,
+}
+
+impl Default for LexerConfig {
+    fn default() -> Self {
+        Self {
+            crate_name: None,
+            parse_macros: Rc::new(vec![
+                syn::parse_quote! { print },
+                syn::parse_quote! { println },
+                syn::parse_quote! { eprint },
+                syn::parse_quote! { eprintln },
+                syn::parse_quote! { format },
+                syn::parse_quote! { dbg },
+            ]),
+            debug: false,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LexerMod {
+    pub attrs: Vec<syn::Attribute>,
+    pub mod_name: syn::Ident,
+    pub items: Vec<syn::Item>,
+    pub lexers: Vec<Lexer>,
+    // pub config: ParserConfig,
+}
+
+impl LexerMod {
+    pub fn parse(
+        attrs: Vec<Attribute>,
+        mod_name: syn::Ident,
+        content: syn::parse::ParseStream,
+    ) -> syn::Result<Self> {
+        let mut common_attrs = vec![];
+        for attr in attrs {
+            if attr.path().is_ident("parse_it") {
+                attr.parse_nested_meta(|_meta| todo!())?;
+            } else {
+                common_attrs.push(attr);
+            }
+        }
+
+        let mut lexers = vec![];
+        let mut items = vec![];
+        while !content.is_empty() {
+            let fork = content.fork();
+            if let Ok(lexer) = fork.parse::<Lexer>() {
+                content.advance_to(&fork);
+                lexers.push(lexer);
+            } else {
+                let item = content.parse::<syn::Item>()?;
+                items.push(item);
+            }
+        }
+
+        Ok(Self {
+            attrs: common_attrs,
+            mod_name,
+            items,
+            lexers,
+        })
+    }
+}
+
+/// ```text
+/// Lexer ::= Vis Name ('->' Type)? '{' LexerRule+ '}'
+/// ```
+#[derive(Debug)]
+pub struct Lexer {
+    pub vis: syn::Visibility,
+    pub name: syn::Ident,
+    pub ty: Option<syn::Type>,
+    pub rules: (LexerRule, Vec<LexerRule>),
+}
+
+impl syn::parse::Parse for Lexer {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let vis = input.parse()?;
+        let name = input.parse()?;
+        let ty = if input.peek(Token![->]) {
+            input.parse::<Token![->]>()?;
+            Some(input.parse()?)
+        } else {
+            None
+        };
+
+        let content;
+        syn::braced!(content in input);
+
+        let first_rule = content.parse::<LexerRule>()?;
+        let mut rules = vec![];
+        while !content.is_empty() {
+            let rule = content.parse::<LexerRule>()?;
+            rules.push(rule);
+        }
+        let rules = (first_rule, rules);
+
+        Ok(Self {
+            vis,
+            name,
+            ty,
+            rules,
+        })
+    }
+}
+
+/// ```text
+/// LexerRule ::= LexerPattern '=>' Expr
+/// ```
+#[derive(Debug)]
+pub struct LexerRule {
+    pub pattern: LexerPattern,
+    pub action: syn::Expr,
+}
+
+impl syn::parse::Parse for LexerRule {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let pattern = input.parse::<LexerPattern>()?;
+        input.parse::<Token![=>]>()?;
+        let action = input.parse::<syn::Expr>()?;
+        if (requires_comma_to_be_match_arm(&action) && !input.is_empty()) || input.peek(Token![,]) {
+            input.parse::<Token![,]>()?;
+        }
+        Ok(LexerRule { pattern, action })
+    }
+}
+
+/// ```text
+/// LexerPattern ::= Regex | Name
+/// ```
+#[derive(Debug)]
+pub enum LexerPattern {
+    Regex(syn::LitStr),
+    Name(syn::Ident),
+}
+
+impl syn::parse::Parse for LexerPattern {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let lookahead = input.lookahead1();
+        if lookahead.peek(syn::Ident) {
+            let ident = input.parse()?;
+            Ok(Self::Name(ident))
+        } else if lookahead.peek(syn::LitStr) {
+            let regex = input.parse()?;
+            Ok(Self::Regex(regex))
+        } else {
+            Err(lookahead.error())
+        }
     }
 }
 
