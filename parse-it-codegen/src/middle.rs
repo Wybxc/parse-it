@@ -71,7 +71,7 @@ impl Capture {
         }
     }
 
-    pub fn to_anoymous(&self) -> Capture {
+    pub fn to_anonymous(&self) -> Capture {
         if self.is_loud() {
             Capture::Loud
         } else {
@@ -215,13 +215,13 @@ impl Parsing {
     }
 
     pub fn repeat(self, at_least: usize) -> Self {
-        let cap = self.capture.to_anoymous();
+        let cap = self.capture.to_anonymous();
         let parser = Box::new(self);
         Self::from_op(ParseOp::Repeat { parser, at_least }, cap)
     }
 
     pub fn optional(self) -> Self {
-        let cap = self.capture.to_anoymous();
+        let cap = self.capture.to_anonymous();
         let parser = Box::new(self);
         Self::from_op(ParseOp::Optional { parser }, cap)
     }
@@ -294,7 +294,7 @@ pub enum ParseOp {
     /// ```
     IgnoreThen { prev: Value, next: Box<Parsing> },
     /// ```ignore
-    /// let fork = &{state}.fork();    
+    /// let fork = &{state}.fork();
     /// let mut results = vec![];
     /// while let Ok(value) = {parser/fork} {
     ///     {state}.advance_to(fork);
