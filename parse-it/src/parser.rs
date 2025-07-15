@@ -105,8 +105,8 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     }
 
     /// Get the current parsing position.
-    pub fn pos(&self) -> &L::Position {
-        self.lexer.pos()
+    pub fn cursor(&self) -> &L::Cursor {
+        self.lexer.cursor()
     }
 
     /// Advance to the next token.
@@ -147,16 +147,16 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     /// # Panics
     /// Panics if the given state is before the current state.
     pub fn advance_to(&mut self, other: &Self) {
-        self.advance_to_pos(other.lexer.pos())
+        self.advance_to_cursor(other.lexer.cursor())
     }
 
     /// Advance the state to the given position.
     ///
     /// # Panics
     /// Panics if the given position is before the current position.
-    pub fn advance_to_pos(&mut self, pos: &L::Position) {
-        assert!(pos >= self.lexer.pos(), "you cannot rewind");
-        self.lexer.advance_to_pos(pos);
+    pub fn advance_to_cursor(&mut self, cursor: &L::Cursor) {
+        assert!(cursor >= self.lexer.cursor(), "you cannot rewind");
+        self.lexer.advance_to_cursor(cursor);
     }
 
     /// Create a fork of the current state for speculative parsing.

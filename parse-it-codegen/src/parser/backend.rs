@@ -127,12 +127,12 @@ impl ParserImpl {
             }
         };
 
-        let position_ty = quote! { <Lexer<'static> as #crate_name::Lexer<'static>>::Position };
+        let cursor_ty = quote! { <Lexer<'static> as #crate_name::Lexer<'static>>::Cursor };
         let memo_decl = match self.memo {
             MemoKind::None => quote! {},
-            MemoKind::Memorize => quote! { memo: #crate_name::Memo<#position_ty, #ret_ty> },
+            MemoKind::Memorize => quote! { memo: #crate_name::Memo<#cursor_ty, #ret_ty> },
             MemoKind::LeftRec => {
-                quote! { memo: #crate_name::Memo<#position_ty, ::std::option::Option<#ret_ty>> }
+                quote! { memo: #crate_name::Memo<#cursor_ty, ::std::option::Option<#ret_ty>> }
             }
         };
         let memo_func = match self.memo {

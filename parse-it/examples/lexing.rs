@@ -15,6 +15,4 @@ parse_it::parse_it! {
     }
 }
 
-fn main() {
-
-}
+fn main() {}

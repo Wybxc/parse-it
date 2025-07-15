@@ -108,7 +108,7 @@ impl ParserMod {
             }
         }) {
             items.push(syn::parse_quote! {
-                type Lexer<'a> = ::parse_it::CharLexer<'a>;
+                type Lexer<'a> = #crate_name::CharLexer<'a>;
             });
         }
 

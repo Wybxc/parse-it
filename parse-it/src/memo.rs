@@ -50,16 +50,16 @@ impl<P: Clone + Eq + Hash, T: Clone> Memo<P, T> {
 #[inline]
 pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
     state: &mut ParserState<L>,
-    memo: &Memo<L::Position, T>,
+    memo: &Memo<L::Cursor, T>,
     parser: impl FnOnce(&mut ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let pos = state.pos().clone();
+    let pos = state.cursor().clone();
     if let Some((value, end)) = memo.get(&pos) {
-        state.advance_to_pos(&end);
+        state.advance_to_cursor(&end);
         Ok(value.clone())
     } else {
         let value = parser(state)?;
-        let end = state.pos().clone();
+        let end = state.cursor().clone();
         memo.insert(pos, (value.clone(), end));
         Ok(value)
     }
@@ -100,12 +100,12 @@ pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
 #[inline]
 pub fn left_rec<'a, L: Lexer<'a>, T: Clone>(
     state: &mut ParserState<L>,
-    memo: &Memo<L::Position, Option<T>>,
+    memo: &Memo<L::Cursor, Option<T>>,
     mut parser: impl FnMut(&mut ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let pos = state.pos().clone();
+    let pos = state.cursor().clone();
     if let Some((value, end)) = memo.get(&pos) {
-        state.advance_to_pos(&end);
+        state.advance_to_cursor(&end);
         if let Some(value) = value {
             Ok(value.clone())
         } else {
@@ -117,14 +117,14 @@ pub fn left_rec<'a, L: Lexer<'a>, T: Clone>(
         loop {
             let mut fork = state.fork();
             let Ok(value) = parser(&mut fork) else { break };
-            let end = fork.pos();
+            let end = fork.cursor();
             if end <= &last.1 {
                 break;
             }
             last = (Some(value), end.clone());
             memo.insert(pos.clone(), last.clone());
         }
-        state.advance_to_pos(&last.1);
+        state.advance_to_cursor(&last.1);
         last.0.ok_or_else(|| state.error())
     }
 }

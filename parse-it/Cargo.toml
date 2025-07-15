@@ -8,3 +8,4 @@ license = "Apache-2.0"
 [dependencies]
 parse-it-macros = { version = "0.1.1", path = "../parse-it-macros" }
 rustc-hash = { workspace = true }
+regex-automata = { workspace = true }
