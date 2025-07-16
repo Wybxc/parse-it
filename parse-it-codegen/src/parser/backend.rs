@@ -2,10 +2,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 
-use crate::{
-    hash::HashMap,
-    parser::middle::{Capture, MemoKind, Middle, ParseOp, ParserImpl, Parsing, Value},
-};
+use crate::parser::middle::{Capture, MemoKind, Middle, ParseOp, ParserImpl, Parsing, Value};
 
 pub struct Context {
     crate_name: TokenStream,
@@ -52,12 +49,8 @@ impl Middle {
             crate_name: self.crate_name,
             debug: self.debug,
         };
-        let mut ret_ty = HashMap::default();
-        let mut depends = HashMap::default();
 
         for parser in self.parsers {
-            ret_ty.insert(parser.name.clone(), parser.ret_ty.clone());
-            depends.insert(parser.name.clone(), parser.depends.clone());
             result.extend(parser.expand(&ctx)?);
         }
 

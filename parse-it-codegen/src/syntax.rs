@@ -511,20 +511,14 @@ impl syn::parse::Parse for Lexer {
             None
         };
 
-        let mut inputs = Punctuated::new();
-        if input.peek(syn::token::Paren) {
+        let inputs = if input.peek(syn::token::Paren) {
             // Lexer ::= Vis Name '(' Parameter* ')'
             let content;
             syn::parenthesized!(content in input);
-            while !content.is_empty() {
-                let input = content.parse::<syn::PatType>()?;
-                inputs.push(input);
-                if content.is_empty() {
-                    break;
-                }
-                inputs.push_punct(content.parse::<Token![,]>()?);
-            }
-        }
+            Punctuated::<syn::PatType, Token![,]>::parse_terminated(&content)?
+        } else {
+            Punctuated::new()
+        };
 
         let content;
         syn::braced!(content in input);

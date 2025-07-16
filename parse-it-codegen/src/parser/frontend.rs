@@ -1,13 +1,14 @@
 use std::{rc::Rc, vec};
 
-use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote, quote_spanned, ToTokens};
-use syn::{punctuated::Punctuated, visit_mut::VisitMut, Token};
+use proc_macro2::TokenStream;
+use quote::{quote, quote_spanned};
+use syn::visit_mut::VisitMut;
 
 use crate::{
     hash::{HashMap, HashSet, OrderedMap, OrderedSet},
     parser::middle::{Capture, MemoKind, Middle, ParserImpl, ParserRef, Parsing},
     syntax::{Atom, Parser, ParserMod, Part, Production, Rule},
+    utils::RewriteSelfVisitor,
 };
 
 #[derive(Default)]
@@ -17,65 +18,6 @@ struct Context {
     pub left_recursion: HashSet<syn::Ident>,
     pub direct_depends: HashMap<syn::Ident, OrderedMap<syn::Ident, ParserRef>>,
     pub depends: HashMap<syn::Ident, OrderedMap<syn::Ident, ParserRef>>,
-}
-
-struct ExprVisitor {
-    pub parse_macros: Rc<Vec<syn::Path>>,
-    /// replace `self` with this ident
-    pub self_ident: syn::Ident,
-    /// whether `self` is referred
-    pub referred_self: bool,
-}
-
-impl ExprVisitor {
-    pub fn new(parse_macros: Rc<Vec<syn::Path>>) -> Self {
-        Self {
-            parse_macros,
-            self_ident: format_ident!("r#__self", span = Span::call_site()),
-            referred_self: false,
-        }
-    }
-}
-
-impl VisitMut for ExprVisitor {
-    fn visit_ident_mut(&mut self, i: &mut proc_macro2::Ident) {
-        if i == "self" {
-            let span = i.span();
-            *i = self.self_ident.clone();
-            i.set_span(span);
-            self.referred_self = true;
-        }
-    }
-
-    fn visit_macro_mut(&mut self, m: &mut syn::Macro) {
-        if self.parse_macros.contains(&m.path) {
-            struct MacroArgs(pub Vec<syn::Expr>);
-            impl syn::parse::Parse for MacroArgs {
-                fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-                    let args = Punctuated::<syn::Expr, Token![,]>::parse_terminated(input)?;
-                    Ok(Self(args.into_iter().collect()))
-                }
-            }
-
-            if let Ok(MacroArgs(mut args)) = syn::parse2::<MacroArgs>(m.tokens.clone()) {
-                for expr in args.iter_mut() {
-                    self.visit_expr_mut(expr);
-                }
-                m.tokens = TokenStream::new();
-                for expr in args {
-                    match expr {
-                        syn::Expr::Lit(syn::ExprLit { attrs, lit }) if attrs.is_empty() => {
-                            m.tokens.extend(lit.to_token_stream());
-                        }
-                        _ => {
-                            m.tokens.extend(quote! { #expr });
-                        }
-                    }
-                    m.tokens.extend(quote! {,});
-                }
-            }
-        }
-    }
 }
 
 impl ParserMod {
@@ -233,7 +175,7 @@ impl Rule {
     fn compile(mut self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
         let mut parser = self.production.compile(ctx)?;
 
-        let mut visitor = ExprVisitor::new(ctx.parse_macros.clone());
+        let mut visitor = RewriteSelfVisitor::new(ctx.parse_macros.clone());
         visitor.visit_expr_mut(&mut self.action);
         if visitor.referred_self {
             parser.capture = Capture::Named(

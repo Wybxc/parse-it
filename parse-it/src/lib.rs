@@ -78,3 +78,11 @@ pub trait ParseIt {
         self.parse_stream(&mut state)
     }
 }
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! identity {
+    ($expr:expr) => {
+        $expr
+    };
+}

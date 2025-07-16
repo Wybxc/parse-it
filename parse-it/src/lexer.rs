@@ -2,7 +2,9 @@
 
 use std::hash::Hash;
 
-use regex_automata::{meta::Regex, Anchored, Input, PatternID};
+use regex_automata::{Anchored, Input, PatternID};
+
+pub use regex_automata::meta::Regex;
 
 /// A span in the source code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -287,6 +289,14 @@ pub struct LexerState<'a> {
 }
 
 impl<'a> LexerState<'a> {
+    pub fn new(input: &'a str) -> Self {
+        Self {
+            start: 0,
+            cursor: 0,
+            input,
+        }
+    }
+
     /// TODO
     pub fn run(&mut self, regex: &Regex) -> Option<PatternID> {
         let input = Input::new(self.input)
