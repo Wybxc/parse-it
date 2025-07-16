@@ -120,7 +120,7 @@ impl ParserImpl {
             }
         };
 
-        let cursor_ty = quote! { <Lexer<'static> as #crate_name::Lexer<'static>>::Cursor };
+        let cursor_ty = quote! { #crate_name::Cursor };
         let memo_decl = match self.memo {
             MemoKind::None => quote! {},
             MemoKind::Memorize => quote! { memo: #crate_name::Memo<#cursor_ty, #ret_ty> },
@@ -183,7 +183,7 @@ impl ParserImpl {
             }
 
             impl #crate_name::ParseIt for #name {
-                type Lexer<'a> = Lexer<'a>;
+                type Lexer = Lexer;
                 type Output = #ret_ty;
 
                 fn parse_stream(&self, state: &mut #crate_name::ParserState<Lexer>) -> Result<#ret_ty, ::parse_it::Error> {

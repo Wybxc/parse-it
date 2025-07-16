@@ -11,7 +11,10 @@
 
 use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
-use crate::lexer::{Lexer, Span};
+use crate::{
+    lexer::{Cursor, LexerState, Span},
+    LexIt,
+};
 
 /// An error that occurred during parsing.
 #[derive(Debug)]
@@ -49,7 +52,7 @@ impl Error {
 ///     Ok('c')
 /// }
 ///
-/// let mut state = ParserState::new(CharLexer::new("abc"));
+/// let mut state = ParserState::new("abc");
 /// parse_abc(&mut state).unwrap();
 /// assert!(state.is_empty());
 /// ```
@@ -86,60 +89,62 @@ impl Error {
 ///     }
 /// }
 ///
-/// let mut state = ParserState::new(CharLexer::new("aaa"));
+/// let mut state = ParserState::new("aaa");
 /// assert_eq!(parse_option(&mut state, |state| state.parse('a')).unwrap(), Some('a'));
 /// assert_eq!(parse_option(&mut state, |state| state.parse('b')).unwrap(), None);
 /// ```
-pub struct ParserState<L> {
+pub struct ParserState<'a, L> {
     lexer: L,
+    lexbuf: LexerState<'a>,
     stack: Rc<RefCell<Vec<(&'static str, usize)>>>,
 }
 
-impl<'a, L: Lexer<'a>> ParserState<L> {
+impl<'a, L: LexIt + Clone> ParserState<'a, L> {
     /// Create a new parser state from the given lexer.
-    pub fn new(lexer: L) -> Self {
+    pub fn new(input: &'a str) -> Self {
         Self {
-            lexer,
+            lexer: L::new(),
+            lexbuf: LexerState::new(input),
             stack: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
     /// Get the current parsing position.
-    pub fn cursor(&self) -> &L::Cursor {
-        self.lexer.cursor()
+    pub fn cursor(&self) -> Cursor {
+        self.lexbuf.cursor()
     }
 
     /// Advance to the next token.
-    fn next(&mut self) -> Option<L::Token> {
-        self.lexer.next()
+    fn next(&mut self) -> Option<L::Token<'a>> {
+        self.lexer.next(&mut self.lexbuf)
     }
 
     /// Consume the next token if it matches the given token.
     pub fn parse_with<T>(
         &mut self,
-        matches: impl FnOnce(L::Token) -> Option<T>,
+        matches: impl FnOnce(L::Token<'a>) -> Option<T>,
     ) -> Result<T, Error> {
         self.next()
             .and_then(matches)
-            .ok_or_else(|| Error::new(self.lexer.span()))
+            .ok_or_else(|| Error::new(self.lexbuf.span()))
     }
 
     /// Consume the next token if it matches the given token via [`PartialEq`].
-    pub fn parse<T>(&mut self, terminal: T) -> Result<L::Token, Error>
+    pub fn parse<T>(&mut self, terminal: T) -> Result<L::Token<'a>, Error>
     where
-        L::Token: PartialEq<T>,
+        L::Token<'a>: PartialEq<T>,
     {
         self.parse_with(|tt| tt.eq(&terminal).then_some(tt))
     }
 
     /// Report an error at the current position.
     pub fn error(&self) -> Error {
-        Error::new(self.lexer.span())
+        Error::new(self.lexbuf.span())
     }
 
     /// Whether the parser is at the end of the input.
     pub fn is_empty(&self) -> bool {
-        self.lexer.is_empty()
+        self.lexbuf.is_empty()
     }
 
     /// Advance the state to the given state.
@@ -147,29 +152,30 @@ impl<'a, L: Lexer<'a>> ParserState<L> {
     /// # Panics
     /// Panics if the given state is before the current state.
     pub fn advance_to(&mut self, other: &Self) {
-        self.advance_to_cursor(other.lexer.cursor())
+        self.advance_to_cursor(other.lexbuf.cursor())
     }
 
     /// Advance the state to the given position.
     ///
     /// # Panics
     /// Panics if the given position is before the current position.
-    pub fn advance_to_cursor(&mut self, cursor: &L::Cursor) {
-        assert!(cursor >= self.lexer.cursor(), "you cannot rewind");
-        self.lexer.advance_to_cursor(cursor);
+    pub fn advance_to_cursor(&mut self, cursor: Cursor) {
+        assert!(cursor >= self.lexbuf.cursor(), "you cannot rewind");
+        self.lexbuf.advance_to_cursor(cursor);
     }
 
     /// Create a fork of the current state for speculative parsing.
     pub fn fork(&self) -> Self {
         Self {
-            lexer: self.lexer.fork(),
+            lexer: self.lexer.clone(),
+            lexbuf: self.lexbuf.clone(),
             stack: self.stack.clone(),
         }
     }
 
     /// Push the given name onto the stack (for debugging purposes).
     pub fn push(&self, name: &'static str) {
-        self.stack.borrow_mut().push((name, self.lexer.span().end));
+        self.stack.borrow_mut().push((name, self.lexbuf.span().end));
     }
 
     /// Pop the last name from the stack (for debugging purposes).

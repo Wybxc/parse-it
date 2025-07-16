@@ -7,7 +7,7 @@ use crate::lexer::middle::{Action, LexerImpl, Middle};
 pub struct Context {
     crate_name: TokenStream,
     lexbuf: syn::Ident,
-    debug: bool,
+    _debug: bool,
 }
 
 impl Middle {
@@ -16,7 +16,7 @@ impl Middle {
         let ctx = Context {
             crate_name: self.crate_name,
             lexbuf: format_ident!("r#__lexbuf", span = Span::call_site()),
-            debug: self.debug,
+            _debug: self.debug,
         };
 
         for lexer in self.lexers {
@@ -72,6 +72,25 @@ impl LexerImpl {
 
         let crate_name = &ctx.crate_name;
         let lexbuf = &ctx.lexbuf;
+
+        let lexer_impl = if inputs.is_empty() {
+            quote! {
+                impl #crate_name::LexIt for #name {
+                    type Token<'lex> = #ret_ty;
+
+                    fn new() -> Self {
+                        Self
+                    }
+
+                    fn next<'lex>(&self, #lexbuf: &mut #crate_name::LexerState<'lex>) -> Option<Self::Token<'lex>> {
+                        Self::run(#lexbuf).ok().flatten()
+                    }
+                }
+            }
+        } else {
+            quote! {}
+        };
+
         Ok(quote! {
             #vis struct #name;
 
@@ -90,8 +109,8 @@ impl LexerImpl {
                     clippy::unit_arg,
                     clippy::useless_conversion
                 )]
-                pub fn run(
-                    #lexbuf: &mut #crate_name::lexer::LexerState,
+                pub fn run<'lex>(
+                    #lexbuf: &mut #crate_name::lexer::LexerState<'lex>,
                     #(#inputs),*
                 ) -> Result<Option<#ret_ty>, ()> {
                     Self::REGEX.with(|regex| {
@@ -111,6 +130,8 @@ impl LexerImpl {
                     })
                 }
             }
+
+            #lexer_impl
         })
     }
 }

@@ -42,15 +42,12 @@ impl ParserMod {
         }
 
         let mut items = self.items;
-        if !items.iter().any(|item| {
-            if let syn::Item::Type(ty) = item {
-                ty.ident == "Lexer"
-            } else {
-                false
-            }
+        if !items.iter().any(|item| match item {
+            syn::Item::Type(ty) => ty.ident == "Lexer",
+            _ => false,
         }) {
             items.push(syn::parse_quote! {
-                type Lexer<'a> = #crate_name::CharLexer<'a>;
+                type Lexer = #crate_name::CharLexer;
             });
         }
 

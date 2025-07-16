@@ -56,25 +56,33 @@ pub mod parser;
 pub use parse_it_macros::parse_it;
 
 pub use crate::{
-    lexer::{CharLexer, Lexer},
+    lexer::{CharLexer, Cursor, LexerState},
     memo::{left_rec, memorize, Memo},
     parser::{Error, ParserState},
 };
 
+/// A lexer for the parser.
+pub trait LexIt {
+    type Token<'a>;
+
+    fn new() -> Self;
+
+    fn next<'a>(&self, lexbuf: &mut LexerState<'a>) -> Option<Self::Token<'a>>;
+}
+
 /// A parser.
 pub trait ParseIt {
     /// The lexer type.
-    type Lexer<'a>: Lexer<'a>;
+    type Lexer: LexIt + Clone;
     /// The parser output type.
     type Output;
 
     /// Parse from a [`ParserState`].
-    fn parse_stream(&self, state: &mut ParserState<Self::Lexer<'_>>)
-        -> Result<Self::Output, Error>;
+    fn parse_stream(&self, state: &mut ParserState<Self::Lexer>) -> Result<Self::Output, Error>;
 
     /// Parse from a string.
     fn parse(&self, input: &str) -> Result<Self::Output, Error> {
-        let mut state = ParserState::new(Self::Lexer::new(input));
+        let mut state = ParserState::new(input);
         self.parse_stream(&mut state)
     }
 }

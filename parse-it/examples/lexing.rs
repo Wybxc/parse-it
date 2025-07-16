@@ -1,11 +1,11 @@
-use parse_it::lexer::LexerState;
+use parse_it::{LexIt, LexerState};
 
 parse_it::parse_it! {
     #[lexer]
     mod lex {
         use parse_it::lexer::Token;
 
-        pub Initial -> Token<()> {
+        pub Initial -> Token<'lex, ()> {
             r"\s" => continue,
             "\"" => {
                 let mut buf = String::new();
@@ -36,8 +36,9 @@ fn main() {
         42
         identifier
     "#;
+    let lexer = lex::Initial::new();
     let mut lexbuf = LexerState::new(src);
-    while let Some(token) = lex::Initial::run(&mut lexbuf).ok().flatten() {
+    while let Some(token) = lexer.next(&mut lexbuf) {
         println!("{token:?}");
     }
 }

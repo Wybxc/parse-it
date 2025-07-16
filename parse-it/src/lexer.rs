@@ -6,6 +6,8 @@ use regex_automata::{Anchored, Input, PatternID};
 
 pub use regex_automata::meta::Regex;
 
+use crate::LexIt;
+
 /// A span in the source code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
@@ -17,9 +19,9 @@ pub struct Span {
 
 /// A token produced by the lexer.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token<T> {
+pub enum Token<'a, T> {
     /// A token carrying a literal value.
-    Literal(LiteralToken),
+    Literal(LiteralToken<'a>),
     /// End of file token.
     Eof,
     /// User-defined token.
@@ -29,7 +31,7 @@ pub enum Token<T> {
 macro_rules! impl_token_from_literal {
     ($($type:ty),+$(,)?) => {
         $(
-            impl<T> From<$type> for Token<T> {
+            impl<'a, T> From<$type> for Token<'a, T> {
                 fn from(value: $type) -> Self {
                     Token::Literal(LiteralToken::from(value))
                 }
@@ -46,15 +48,15 @@ impl_token_from_literal! {
     bool,
 }
 
-impl<T> From<&str> for Token<T> {
-    fn from(value: &str) -> Self {
-        Token::Literal(LiteralToken::String(value.to_string()))
+impl<'a, T> From<&'a str> for Token<'a, T> {
+    fn from(value: &'a str) -> Self {
+        Token::Literal(LiteralToken::Str(value))
     }
 }
 
 /// A literal token type.
 #[derive(Debug, Clone, PartialEq)]
-pub enum LiteralToken {
+pub enum LiteralToken<'a> {
     /// A token carrying an i8 value.
     I8(i8),
     /// A token carrying an i16 value.
@@ -81,6 +83,8 @@ pub enum LiteralToken {
     F64(f64),
     /// A token carrying a char value.
     Char(char),
+    /// A token carrying a str value.
+    Str(&'a str),
     /// A token carrying a string value.
     String(String),
     /// A token carrying a boolean value.
@@ -90,7 +94,7 @@ pub enum LiteralToken {
 macro_rules! impl_literal_token_from {
     ($($name:ident => $type:ty),+$(,)?) => {
         $(
-            impl From<$type> for LiteralToken {
+            impl<'a> From<$type> for LiteralToken<'a> {
                 fn from(value: $type) -> Self {
                     LiteralToken::$name(value)
                 }
@@ -120,7 +124,7 @@ impl_literal_token_from! {
 macro_rules! impl_literal_token_integer {
     ($($function:ident -> $type:ident),+$(,)?) => {
         $(
-            impl LiteralToken {
+            impl<'a> LiteralToken<'a> {
                 #[doc = concat!("Try converting the token to an ", stringify!($type), " value.")]
                 pub fn $function(&self) -> Option<$type> {
                     match *self {
@@ -155,7 +159,7 @@ impl_literal_token_integer! {
     as_u128 -> u128,
 }
 
-impl LiteralToken {
+impl<'a> LiteralToken<'a> {
     /// Try converting the token to a `char` value.
     pub fn as_char(&self) -> Option<char> {
         match *self {
@@ -181,103 +185,10 @@ impl LiteralToken {
     }
 }
 
-/// A lexer for the parser.
-pub trait Lexer<'a> {
-    /// The lexed token type.
-    type Token: PartialEq;
-    /// The cursor type used for tracking positions.
-    type Cursor: Clone + Hash + Eq + PartialOrd;
-
-    /// Create a new lexer from the given input.
-    fn new(input: &'a str) -> Self;
-
-    /// Get the current lexeme.
-    fn lexeme(&self) -> &str;
-
-    /// Get the current span.
-    fn span(&self) -> Span;
-
-    /// Get the current position.
-    fn cursor(&self) -> &Self::Cursor;
-
-    /// Consume the next token.
-    fn next(&mut self) -> Option<Self::Token>;
-
-    /// Whether the lexer is at the end of the input.
-    fn is_empty(&self) -> bool;
-
-    /// Advance the lexer to the given cursor.
-    fn advance_to_cursor(&mut self, cursor: &Self::Cursor);
-
-    /// Fork the lexer.
-    fn fork(&self) -> Self;
-}
-
-/// A lexer for a single character.
-#[derive(Clone)]
-pub struct CharLexer<'a> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Cursor {
     cursor: usize,
-    current: char,
-    remaining: &'a str,
-}
-
-impl<'a> Lexer<'a> for CharLexer<'a> {
-    type Token = char;
-    type Cursor = usize;
-
-    fn new(input: &'a str) -> Self {
-        Self {
-            cursor: 0,
-            current: input.chars().next().unwrap_or_default(),
-            remaining: input,
-        }
-    }
-
-    fn lexeme(&self) -> &str {
-        self.remaining
-    }
-
-    fn span(&self) -> Span {
-        Span {
-            start: self.cursor,
-            end: self.cursor + self.current.len_utf8(),
-        }
-    }
-
-    fn cursor(&self) -> &Self::Cursor {
-        &self.cursor
-    }
-
-    fn next(&mut self) -> Option<Self::Token> {
-        let start = self.cursor;
-        let mut chars = self.remaining.chars();
-        if let Some(c) = chars.next() {
-            let advance = c.len_utf8();
-            let remaining = chars.as_str();
-
-            self.cursor = start + advance;
-            self.current = c;
-            self.remaining = remaining;
-
-            Some(c)
-        } else {
-            None
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.remaining.is_empty()
-    }
-
-    fn advance_to_cursor(&mut self, cursor: &usize) {
-        self.cursor = *cursor;
-        self.remaining = &self.remaining[self.cursor..];
-        self.current = self.remaining.chars().next().unwrap_or_default();
-    }
-
-    fn fork(&self) -> Self {
-        self.clone()
-    }
+    start: usize,
 }
 
 /// TODO
@@ -309,7 +220,57 @@ impl<'a> LexerState<'a> {
     }
 
     /// TODO
-    pub fn lexeme(&self) -> &str {
+    pub fn lexeme(&self) -> &'a str {
         &self.input[self.start..self.cursor]
+    }
+
+    /// Get the current cursor position.
+    pub fn cursor(&self) -> Cursor {
+        Cursor {
+            start: self.start,
+            cursor: self.cursor,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        Span {
+            start: self.start,
+            end: self.cursor,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.cursor >= self.input.len()
+    }
+
+    pub fn advance_to_cursor(&mut self, cursor: Cursor) {
+        self.start = cursor.start;
+        self.cursor = cursor.cursor;
+    }
+}
+
+/// A lexer for a single character.
+#[derive(Clone)]
+pub struct CharLexer;
+
+impl LexIt for CharLexer {
+    type Token<'a> = char;
+
+    fn new() -> Self {
+        Self
+    }
+
+    fn next<'a>(&self, lexbuf: &mut LexerState<'a>) -> Option<Self::Token<'a>> {
+        thread_local! {
+            static REGEX: Regex = Regex::new(r".").unwrap();
+        }
+        REGEX.with(|regex| {
+            if lexbuf.run(regex).is_some() {
+                let lexeme = lexbuf.lexeme();
+                Some(lexeme.chars().next().unwrap())
+            } else {
+                None
+            }
+        })
     }
 }

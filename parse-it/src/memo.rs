@@ -4,7 +4,7 @@ use std::{cell::RefCell, fmt::Debug, hash::Hash};
 
 use rustc_hash::FxHashMap;
 
-use crate::{lexer::Lexer, Error, ParserState};
+use crate::{lexer::Cursor, Error, LexIt, ParserState};
 
 /// Memorization for a parser.
 ///
@@ -48,18 +48,18 @@ impl<P: Clone + Eq + Hash, T: Clone> Memo<P, T> {
 ///
 /// ["Packrat"]: https://en.wikipedia.org/wiki/Packrat_parser
 #[inline]
-pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
+pub fn memorize<L: LexIt + Clone, T: Clone>(
     state: &mut ParserState<L>,
-    memo: &Memo<L::Cursor, T>,
+    memo: &Memo<Cursor, T>,
     parser: impl FnOnce(&mut ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let pos = state.cursor().clone();
+    let pos = state.cursor();
     if let Some((value, end)) = memo.get(&pos) {
-        state.advance_to_cursor(&end);
+        state.advance_to_cursor(end);
         Ok(value.clone())
     } else {
         let value = parser(state)?;
-        let end = state.cursor().clone();
+        let end = state.cursor();
         memo.insert(pos, (value.clone(), end));
         Ok(value)
     }
@@ -78,7 +78,7 @@ pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
 /// # use parse_it::*;
 /// fn parse(
 ///     state: &mut ParserState<CharLexer>,
-///     memo: &Memo<usize, Option<String>>,
+///     memo: &Memo<Cursor, Option<String>>,
 /// ) -> Result<String, Error> {
 ///     left_rec(state, memo, |state| {
 ///         let fork = &mut state.fork();
@@ -92,39 +92,39 @@ pub fn memorize<'a, L: Lexer<'a>, T: Clone>(
 ///     })
 /// }
 ///
-/// let mut state = ParserState::new(CharLexer::new("abbbb"));
+/// let mut state = ParserState::new("abbbb");
 /// assert_eq!(parse(&mut state, &Memo::default()).unwrap(), "abbbb");
 /// ```
 ///
 /// [blog post]:https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
 #[inline]
-pub fn left_rec<'a, L: Lexer<'a>, T: Clone>(
+pub fn left_rec<L: LexIt + Clone, T: Clone>(
     state: &mut ParserState<L>,
-    memo: &Memo<L::Cursor, Option<T>>,
+    memo: &Memo<Cursor, Option<T>>,
     mut parser: impl FnMut(&mut ParserState<L>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let pos = state.cursor().clone();
+    let pos = state.cursor();
     if let Some((value, end)) = memo.get(&pos) {
-        state.advance_to_cursor(&end);
+        state.advance_to_cursor(end);
         if let Some(value) = value {
             Ok(value.clone())
         } else {
             Err(state.error())
         }
     } else {
-        memo.insert(pos.clone(), (None, pos.clone()));
-        let mut last = (None, pos.clone());
+        memo.insert(pos, (None, pos));
+        let mut last = (None, pos);
         loop {
             let mut fork = state.fork();
             let Ok(value) = parser(&mut fork) else { break };
             let end = fork.cursor();
-            if end <= &last.1 {
+            if end <= last.1 {
                 break;
             }
-            last = (Some(value), end.clone());
-            memo.insert(pos.clone(), last.clone());
+            last = (Some(value), end);
+            memo.insert(pos, last.clone());
         }
-        state.advance_to_cursor(&last.1);
+        state.advance_to_cursor(last.1);
         last.0.ok_or_else(|| state.error())
     }
 }
