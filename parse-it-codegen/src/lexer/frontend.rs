@@ -63,7 +63,7 @@ impl Lexer {
                 LexerPattern::Regex(lit_str) => {
                     if let Err(e) = regex_syntax::parse(&lit_str.value()) {
                         let e = format!("Invalid regex pattern: {e}");
-                        return Err(quote_spanned! { lit_str.span() => compile_error!(#e) });
+                        return Err(quote_spanned! { lit_str.span() => compile_error!(#e); });
                     }
                     rules.push(Rule {
                         pattern: lit_str.clone(),
@@ -73,15 +73,15 @@ impl Lexer {
                 LexerPattern::Name(ident) => {
                     if stack.contains(ident) {
                         let e = format!("Recursive inclusion of lexer `{ident}`");
-                        return Err(quote_spanned! { ident.span() => compile_error!(#e) });
+                        return Err(quote_spanned! { ident.span() => compile_error!(#e); });
                     }
                     let lexer = lexers.get(ident).ok_or_else(|| {
                         let e = format!("Lexer `{ident}` not found");
-                        quote_spanned! { ident.span() => compile_error!(#e) }
+                        quote_spanned! { ident.span() => compile_error!(#e); }
                     })?;
                     if !lexer.inputs.is_empty() {
                         let e = format!("Cannot include lexer `{ident}` in another lexer, it has inputs defined");
-                        return Err(quote_spanned! { ident.span() => compile_error!(#e) });
+                        return Err(quote_spanned! { ident.span() => compile_error!(#e); });
                     }
                     let action = rule.compile(self.ty.clone(), ctx);
                     rules.extend(lexer.full_rules(lexers, stack, ctx)?.into_iter().map(
@@ -102,6 +102,10 @@ impl Lexer {
         lexers: &HashMap<syn::Ident, &Lexer>,
         ctx: &Context,
     ) -> Result<LexerImpl, TokenStream> {
+        if self.rules.is_empty() {
+            let e = format!("Lexer `{}` has no rules defined", self.name);
+            return Err(quote_spanned! { self.name.span() => compile_error!(#e); });
+        }
         let rules = self.full_rules(lexers, &mut vec![], ctx)?;
         let inputs = self.inputs.iter().cloned().collect();
         Ok(LexerImpl {

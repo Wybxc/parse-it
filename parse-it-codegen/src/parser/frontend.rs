@@ -277,7 +277,7 @@ impl Atom {
             Atom::PatTerminal(pat) => Ok(Parsing::just_pat(pat)),
             Atom::NonTerminal(name) => {
                 let depends = ctx.depends.get(&name).ok_or_else(|| {
-                    quote_spanned! { name.span() => compile_error!("use of undeclared parser") }
+                    quote_spanned! { name.span() => compile_error!("use of undeclared parser"); }
                 })?;
                 let depends = depends.iter().map(|(_, p)| p.clone()).collect();
                 Ok(Parsing::call(name, depends))

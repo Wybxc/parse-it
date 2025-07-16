@@ -89,9 +89,7 @@ impl Capture {
                         Ok(Capture::Named(p1, Box::new(Capture::Loud)))
                     }
                 } else {
-                    Err(quote_spanned! {
-                        p1.span() => compile_error!("pattern mismatch")
-                    })
+                    Err(quote_spanned! { p1.span() => compile_error!("pattern mismatch"); })
                 }
             }
             (Capture::Tuple(c1, c2), Capture::Tuple(c3, c4)) => {
@@ -102,9 +100,7 @@ impl Capture {
             (Capture::Loud, _) => Ok(Capture::Loud),
             (_, Capture::Loud) => Ok(Capture::Loud),
             (Capture::Slient, Capture::Slient) => Ok(Capture::Slient),
-            _ => Err(quote! {
-                compile_error!("capture mismatch")
-            }),
+            _ => Err(quote! { compile_error!("capture mismatch"); }),
         }
     }
 }

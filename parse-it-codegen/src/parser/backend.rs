@@ -28,7 +28,7 @@ impl Capture {
                 _ => match c.as_ref() {
                     Capture::Loud | Capture::Slient => Ok(quote! { #p }),
                     _ => {
-                        Err(quote_spanned! { p.span() => compile_error!("must be an ident here") })
+                        Err(quote_spanned! { p.span() => compile_error!("must be an ident here"); })
                     }
                 },
             },
