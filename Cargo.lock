@@ -57,6 +57,7 @@ dependencies = [
  "hashlink",
  "proc-macro2",
  "quote",
+ "regex-syntax",
  "rustc-hash",
  "syn",
 ]

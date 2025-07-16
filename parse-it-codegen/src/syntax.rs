@@ -447,7 +447,7 @@ pub struct LexerMod {
     pub mod_name: syn::Ident,
     pub items: Vec<syn::Item>,
     pub lexers: Vec<Lexer>,
-    // pub config: ParserConfig,
+    pub config: ParserConfig,
 }
 
 impl LexerMod {
@@ -483,19 +483,21 @@ impl LexerMod {
             mod_name,
             items,
             lexers,
+            config: Default::default(),
         })
     }
 }
 
 /// ```text
-/// Lexer ::= Vis Name ('->' Type)? '{' LexerRule+ '}'
+/// Lexer ::= Vis Name ('(' Parameter* ')')? ('->' Type)? '{' LexerRule+ '}'
 /// ```
 #[derive(Debug)]
 pub struct Lexer {
     pub vis: syn::Visibility,
     pub name: syn::Ident,
     pub ty: Option<syn::Type>,
-    pub rules: (LexerRule, Vec<LexerRule>),
+    pub inputs: Punctuated<syn::PatType, Token![,]>,
+    pub rules: Vec<LexerRule>,
 }
 
 impl syn::parse::Parse for Lexer {
@@ -509,21 +511,35 @@ impl syn::parse::Parse for Lexer {
             None
         };
 
+        let mut inputs = Punctuated::new();
+        if input.peek(syn::token::Paren) {
+            // Lexer ::= Vis Name '(' Parameter* ')'
+            let content;
+            syn::parenthesized!(content in input);
+            while !content.is_empty() {
+                let input = content.parse::<syn::PatType>()?;
+                inputs.push(input);
+                if content.is_empty() {
+                    break;
+                }
+                inputs.push_punct(content.parse::<Token![,]>()?);
+            }
+        }
+
         let content;
         syn::braced!(content in input);
 
-        let first_rule = content.parse::<LexerRule>()?;
         let mut rules = vec![];
         while !content.is_empty() {
             let rule = content.parse::<LexerRule>()?;
             rules.push(rule);
         }
-        let rules = (first_rule, rules);
 
         Ok(Self {
             vis,
             name,
             ty,
+            inputs,
             rules,
         })
     }

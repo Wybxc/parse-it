@@ -24,29 +24,29 @@ pub enum Token<T> {
     Custom(T),
 }
 
-// macro_rules! impl_token_from_literal {
-//     ($($type:ty),+$(,)?) => {
-//         $(
-//             impl<T> From<$type> for Token<T> {
-//                 fn from(value: $type) -> Self {
-//                     Token::Literal(LiteralToken::from(value))
-//                 }
-//             }
-//         )+
-//     };
-// }
+macro_rules! impl_token_from_literal {
+    ($($type:ty),+$(,)?) => {
+        $(
+            impl<T> From<$type> for Token<T> {
+                fn from(value: $type) -> Self {
+                    Token::Literal(LiteralToken::from(value))
+                }
+            }
+        )+
+    };
+}
 
-// impl_token_from_literal! {
-//     i8, i16, i32, i64, i128,
-//     u8, u16, u32, u64, u128,
-//     f32, f64,
-//     char, String,
-//     bool,
-// }
+impl_token_from_literal! {
+    i8, i16, i32, i64, i128,
+    u8, u16, u32, u64, u128,
+    f32, f64,
+    char, String,
+    bool,
+}
 
-impl<T> From<T> for Token<T> {
-    fn from(value: T) -> Self {
-        Token::Custom(value)
+impl<T> From<&str> for Token<T> {
+    fn from(value: &str) -> Self {
+        Token::Literal(LiteralToken::String(value.to_string()))
     }
 }
 
@@ -288,7 +288,7 @@ pub struct LexerState<'a> {
 
 impl<'a> LexerState<'a> {
     /// TODO
-    pub fn run(&mut self, regex: Regex) -> Option<PatternID> {
+    pub fn run(&mut self, regex: &Regex) -> Option<PatternID> {
         let input = Input::new(self.input)
             .range(self.cursor..)
             .anchored(Anchored::Yes);
@@ -296,5 +296,10 @@ impl<'a> LexerState<'a> {
         self.start = self.cursor;
         self.cursor = end.offset();
         Some(end.pattern())
+    }
+
+    /// TODO
+    pub fn lexeme(&self) -> &str {
+        &self.input[self.start..self.cursor]
     }
 }
