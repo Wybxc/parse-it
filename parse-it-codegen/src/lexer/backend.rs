@@ -92,6 +92,7 @@ impl LexerImpl {
         };
 
         Ok(quote! {
+            #[derive(Clone, Copy, Debug)]
             #vis struct #name;
 
             impl #name {

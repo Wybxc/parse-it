@@ -58,7 +58,7 @@ impl Middle {
         let attrs = self.attrs;
         let items = self.items;
         Ok(quote! {
-            #[allow(non_snake_case)]
+            #[allow(non_snake_case, unused_parens, clippy::double_parens)]
             #(#attrs)*
             mod #mod_name {
                 #(#items)*
@@ -202,6 +202,7 @@ impl ParserImpl {
 impl Parsing {
     pub fn expand(self, state_token: StateToken) -> Result<TokenStream, TokenStream> {
         let mut result = TokenStream::new();
+        let span = self.span;
         let state = state_token.to_ident();
         let value = self.result();
         for (value, op) in self.into_iter() {
@@ -209,10 +210,14 @@ impl Parsing {
             let op = match op {
                 ParseOp::Just(c) => {
                     let result = match c {
-                        syn::Lit::Str(lit_str) => quote! { #state.parse_str(#lit_str) },
-                        syn::Lit::Char(lit_char) => quote! { #state.parse_char(#lit_char) },
+                        syn::Lit::Str(lit_str) => {
+                            quote_spanned! { span => #state.parse_str(#lit_str) }
+                        }
+                        syn::Lit::Char(lit_char) => {
+                            quote_spanned! { span => #state.parse_char(#lit_char) }
+                        }
                         syn::Lit::Int(_) | syn::Lit::Float(_) | syn::Lit::Bool(_) => {
-                            quote! { #state.parse_literal(#c) }
+                            quote_spanned! { span => #state.parse_literal(#c) }
                         }
                         _ => {
                             return Err(
@@ -220,9 +225,12 @@ impl Parsing {
                             )
                         }
                     };
-                    quote! { let #value = #result; }
+                    quote_spanned! { span => let #value = #result; }
                 }
-                ParseOp::Pat(p, caps) => quote! {
+                ParseOp::JustType(ty) => quote_spanned! { span =>
+                    let #value = #state.parse_literal_type::<#ty>();
+                },
+                ParseOp::Pat(p, caps) => quote_spanned! { span =>
                     let #value = #state.parse_with(|tt| match tt {
                         #p => Some((#(#caps),*)),
                         _ => None,
@@ -231,17 +239,17 @@ impl Parsing {
                 ParseOp::Call { parser, depends } => {
                     let parser = parser.as_ident();
                     let depends = depends.iter().map(|d| d.as_ident());
-                    quote! { let #value = #parser.parse_memo(#state, #(#depends),*); }
+                    quote_spanned! { span => let #value = #parser.parse_memo(#state, #(#depends),*); }
                 }
                 ParseOp::Map { parser, cap, expr } => {
                     let parser = parser.to_ident();
                     let capture = cap.to_pat()?;
-                    quote! { let #value = #parser.map(|#capture| #expr); }
+                    quote_spanned! { span => let #value = #parser.map(|#capture| #expr); }
                 }
                 ParseOp::Then { prev, next } => {
                     let prev = prev.to_ident();
                     let next = next.expand(state_token)?;
-                    quote! {
+                    quote_spanned! { span =>
                         let #value = match #prev {
                             Ok(v1) => #next.map(|v2| (v1, v2)),
                             Err(e) => Err(e),
@@ -251,7 +259,7 @@ impl Parsing {
                 ParseOp::ThenIgnore { prev, next } => {
                     let prev = prev.to_ident();
                     let next = next.expand(state_token)?;
-                    quote! {
+                    quote_spanned! { span =>
                         let #value = match #prev {
                             Ok(v) => #next.map(|_| v),
                             Err(e) => Err(e),
@@ -261,7 +269,7 @@ impl Parsing {
                 ParseOp::IgnoreThen { prev, next } => {
                     let prev = prev.to_ident();
                     let next = next.expand(state_token)?;
-                    quote! {
+                    quote_spanned! { span =>
                         let #value = match #prev {
                             Ok(_) => #next,
                             Err(e) => Err(e),
@@ -272,7 +280,7 @@ impl Parsing {
                     let fork_token = state_token.fork();
                     let fork = fork_token.to_ident();
                     let parser = parser.expand(fork_token)?;
-                    let repeat = quote! {
+                    let repeat = quote_spanned! { span =>
                         let #fork = &mut #state.fork();
                         let mut results = vec![];
                         while let Ok(value) = #parser {
@@ -281,12 +289,12 @@ impl Parsing {
                         }
                     };
                     if at_least == 0 {
-                        quote! {
+                        quote_spanned! { span =>
                             #repeat
                             let #value = Ok(results);
                         }
                     } else {
-                        quote! {
+                        quote_spanned! { span =>
                             #repeat
                             let #value = if results.len() >= #at_least {
                                 Ok(results)
@@ -298,13 +306,13 @@ impl Parsing {
                 }
                 ParseOp::Optional { parser } => {
                     let parser = parser.expand(state_token)?;
-                    quote! { let #value = #parser.ok(); }
+                    quote_spanned! { span => let #value = #parser.ok(); }
                 }
                 ParseOp::LookAhead { parser } => {
                     let fork_token = state_token.fork();
                     let fork = fork_token.to_ident();
                     let parser = parser.expand(fork_token)?;
-                    quote! {
+                    quote_spanned! { span =>
                         let #fork = &mut #state.fork();
                         let #value = #parser.map(|_| ());
                     }
@@ -313,7 +321,7 @@ impl Parsing {
                     let fork_token = state_token.fork();
                     let fork = fork_token.to_ident();
                     let parser = parser.expand(fork_token)?;
-                    quote! {
+                    quote_spanned! { span =>
                         let #fork = &mut #state.fork();
                         let #value = if let Ok(value) = #parser {
                             Err(#state.error())
@@ -329,7 +337,7 @@ impl Parsing {
                         .into_iter()
                         .map(|p| p.expand(fork_token))
                         .collect::<Result<Vec<_>, _>>()?;
-                    quote! {
+                    quote_spanned! { span =>
                         let mut fork;
                         let mut #fork;
                         let #value = #(if let Ok(value) = {
@@ -348,7 +356,7 @@ impl Parsing {
             result.extend(op);
         }
         let value = value.to_ident();
-        Ok(quote! {{
+        Ok(quote_spanned! { span => {
             #result
             #value
         }})

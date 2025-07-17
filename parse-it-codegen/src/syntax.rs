@@ -358,11 +358,13 @@ impl syn::parse::Parse for Part {
 ///        | '[' Production ('|' Production)* ']'
 ///        | Terminal
 ///        | NonTerminal
+/// Terminal ::= Literal | Pat | '<' Type '>'
 /// ```
 #[derive(Debug)]
 pub enum Atom {
     Terminal(syn::Lit),
     PatTerminal(syn::Pat),
+    TypePterminal(syn::Type),
     NonTerminal(syn::Ident),
     Sub(Box<Production>),
     Choice(Box<Production>, Vec<Production>),
@@ -395,6 +397,12 @@ impl syn::parse::Parse for Atom {
         } else if lookahead.peek(syn::Lit) {
             // Atom ::= Terminal
             Atom::Terminal(input.parse()?)
+        } else if lookahead.peek(Token![<]) {
+            // Atom ::= '<' Type '>'
+            input.parse::<Token![<]>()?;
+            let ty = input.parse::<syn::Type>()?;
+            input.parse::<Token![>]>()?;
+            Atom::TypePterminal(ty)
         } else if lookahead.peek(syn::Ident) {
             let fork = input.fork();
             if let Ok(pat) = fork.call(syn::Pat::parse_single) {

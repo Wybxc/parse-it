@@ -108,6 +108,7 @@ impl Capture {
 pub struct Parsing {
     values: OrderedMap<Value, ParseOp>,
     pub capture: Capture,
+    pub span: Span,
 }
 
 impl Parsing {
@@ -115,10 +116,14 @@ impl Parsing {
         self.values.into_iter()
     }
 
-    fn from_op(op: ParseOp, capture: Capture) -> Self {
+    fn from_op(op: ParseOp, capture: Capture, span: Span) -> Self {
         let mut values = LinkedHashMap::default();
         values.insert(Value::next(), op);
-        Self { values, capture }
+        Self {
+            values,
+            capture,
+            span,
+        }
     }
 
     pub fn result(&self) -> Value {
@@ -133,26 +138,32 @@ impl Parsing {
         self
     }
 
-    pub fn just(c: syn::Lit) -> Self {
-        Self::from_op(ParseOp::Just(c), Capture::Slient)
+    pub fn just(c: syn::Lit, span: Span) -> Self {
+        Self::from_op(ParseOp::Just(c), Capture::Slient, span)
     }
 
-    pub fn just_pat(p: syn::Pat) -> Self {
+    pub fn just_pat(p: syn::Pat, span: Span) -> Self {
         let captures = PatVistor::collect_captures(&p);
         let captures: Vec<syn::Ident> = captures.into_iter().collect();
         Self::from_op(
             ParseOp::Pat(p.clone(), captures.clone()),
             Capture::TupleVec(captures),
+            span,
         )
     }
 
-    pub fn call(name: syn::Ident, depends: Vec<ParserRef>) -> Self {
+    pub fn just_type(ty: syn::Type, span: Span) -> Self {
+        Self::from_op(ParseOp::JustType(ty), Capture::Slient, span)
+    }
+
+    pub fn call(name: syn::Ident, depends: Vec<ParserRef>, span: Span) -> Self {
         Self::from_op(
             ParseOp::Call {
                 parser: ParserRef::new(&name),
                 depends,
             },
             Capture::Loud,
+            span,
         )
     }
 
@@ -187,6 +198,7 @@ impl Parsing {
         self,
         rest: impl Iterator<Item = Result<Parsing, TokenStream>>,
     ) -> Result<Self, TokenStream> {
+        let span = self.span;
         let mut capture = self.capture.clone();
         let mut parsers = vec![self];
 
@@ -197,46 +209,53 @@ impl Parsing {
         }
 
         let op = ParseOp::Choice { parsers };
-        Ok(Self::from_op(op, capture))
+        Ok(Self::from_op(op, capture, span))
     }
 
     pub fn choice_nocap(
         self,
         rest: impl Iterator<Item = Result<Parsing, TokenStream>>,
     ) -> Result<Self, TokenStream> {
+        let span = self.span;
         let parsers = std::iter::once(Ok(self)).chain(rest);
         let parsers = parsers.collect::<Result<Vec<_>, _>>()?;
         let op = ParseOp::Choice { parsers };
-        Ok(Self::from_op(op, Capture::Loud))
+        Ok(Self::from_op(op, Capture::Loud, span))
     }
 
     pub fn repeat(self, at_least: usize) -> Self {
+        let span = self.span;
         let cap = self.capture.to_anonymous();
         let parser = Box::new(self);
-        Self::from_op(ParseOp::Repeat { parser, at_least }, cap)
+        Self::from_op(ParseOp::Repeat { parser, at_least }, cap, span)
     }
 
     pub fn optional(self) -> Self {
+        let span = self.span;
         let cap = self.capture.to_anonymous();
         let parser = Box::new(self);
-        Self::from_op(ParseOp::Optional { parser }, cap)
+        Self::from_op(ParseOp::Optional { parser }, cap, span)
     }
 
     pub fn look_ahead(self) -> Self {
+        let span = self.span;
         Self::from_op(
             ParseOp::LookAhead {
                 parser: Box::new(self),
             },
             Capture::Slient,
+            span,
         )
     }
 
     pub fn look_ahead_not(self) -> Self {
+        let span = self.span;
         Self::from_op(
             ParseOp::LookAheadNot {
                 parser: Box::new(self),
             },
             Capture::Slient,
+            span,
         )
     }
 }
@@ -246,6 +265,10 @@ pub enum ParseOp {
     /// {state}.parse({lit})
     /// ```
     Just(syn::Lit),
+    /// ```ignore
+    /// {state}.parse_literal_type::<{ty}>()
+    /// ```
+    JustType(syn::Type),
     /// ```ignore
     /// {state}.parse(|tt| match tt {
     ///     {pat} => Some(({..cap})),

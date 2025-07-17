@@ -115,6 +115,18 @@ impl<'a, T> From<&'a str> for Token<'a, T> {
     }
 }
 
+impl<'a, T, U> TryConvert<U> for Token<'a, T>
+where
+    LiteralToken<'a>: TryConvert<U>,
+{
+    fn try_convert(&self) -> Option<U> {
+        match self {
+            Token::Literal(lit) => lit.try_convert(),
+            _ => None,
+        }
+    }
+}
+
 impl<'a, T> AsLiteral for Token<'a, T> {
     fn as_str<'s>(&self) -> Option<Cow<'s, str>>
     where
@@ -239,6 +251,26 @@ impl_try_convert_for_literal_int! {
     U64 => u64,
     U128 => u128,
     Usize => usize,
+}
+
+impl TryConvert<f32> for LiteralToken<'_> {
+    fn try_convert(&self) -> Option<f32> {
+        match *self {
+            LiteralToken::F32(v) => Some(v),
+            LiteralToken::F64(v) => Some(v as f32),
+            _ => None,
+        }
+    }
+}
+
+impl TryConvert<f64> for LiteralToken<'_> {
+    fn try_convert(&self) -> Option<f64> {
+        match *self {
+            LiteralToken::F32(v) => Some(v as f64),
+            LiteralToken::F64(v) => Some(v),
+            _ => None,
+        }
+    }
 }
 
 impl TryConvert<bool> for LiteralToken<'_> {

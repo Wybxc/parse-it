@@ -198,6 +198,14 @@ impl<'a, L: LexIt + Clone + 'a> ParserState<'a, L> {
         self.parse_with(|tt| tt.as_literal().and_then(|l| (l == literal).then_some(l)))
     }
 
+    pub fn parse_literal_type<T>(&mut self) -> Result<T, Error>
+    where
+        L::Token<'a>: AsLiteral + TryConvert<T>,
+        T: PartialEq + Copy,
+    {
+        self.parse_with(|tt| tt.as_literal().and_then(|l| l.try_convert()))
+    }
+
     pub fn parse_char(&mut self, literal: char) -> Result<char, Error>
     where
         L::Token<'a>: AsLiteral,

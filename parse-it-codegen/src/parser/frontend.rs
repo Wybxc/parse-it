@@ -1,8 +1,8 @@
 use std::{rc::Rc, vec};
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::{quote, quote_spanned};
-use syn::visit_mut::VisitMut;
+use syn::{spanned::Spanned, visit_mut::VisitMut};
 
 use crate::{
     hash::{HashMap, HashSet, OrderedMap, OrderedSet},
@@ -27,6 +27,7 @@ impl ParserMod {
             ..Default::default()
         };
 
+        self.check_missing_items(&mut ctx)?;
         self.analyze_left_recursion(&mut ctx);
         self.analyze_depends(&mut ctx);
 
@@ -60,6 +61,23 @@ impl ParserMod {
             debug: self.config.debug,
         };
         Ok(middle)
+    }
+
+    fn check_missing_items(&self, ctx: &mut Context) -> Result<(), TokenStream> {
+        let parsers = self
+            .parsers
+            .iter()
+            .map(|p| p.name.clone())
+            .collect::<HashSet<_>>();
+        for parser in &self.parsers {
+            for depend in parser.analyze_direct_depends(ctx).keys() {
+                if !parsers.contains(depend) {
+                    let e = format!("Parser `{depend}` not found");
+                    return Err(quote_spanned! { depend.span() => compile_error!(#e); });
+                }
+            }
+        }
+        Ok(())
     }
 
     fn analyze_left_recursion(&self, ctx: &mut Context) {
@@ -170,7 +188,8 @@ impl Parser {
 
 impl Rule {
     fn compile(mut self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
-        let mut parser = self.production.compile(ctx)?;
+        let span = self.action.span();
+        let mut parser = self.production.compile(ctx, span)?;
 
         let mut visitor = RewriteSelfVisitor::new(ctx.parse_macros.clone());
         visitor.visit_expr_mut(&mut self.action);
@@ -201,10 +220,10 @@ impl Rule {
 }
 
 impl Production {
-    fn compile(self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
-        let mut result = self.parts.0.compile(ctx)?;
+    fn compile(self, ctx: &mut Context, span: Span) -> Result<Parsing, TokenStream> {
+        let mut result = self.parts.0.compile(ctx, span)?;
         for part in self.parts.1 {
-            let part = part.compile(ctx)?;
+            let part = part.compile(ctx, span)?;
             result = result.then(Box::new(part));
         }
         Ok(result)
@@ -253,8 +272,8 @@ impl Production {
 }
 
 impl Part {
-    fn compile(self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
-        let mut parser = self.part.compile(ctx)?;
+    fn compile(self, ctx: &mut Context, span: Span) -> Result<Parsing, TokenStream> {
+        let mut parser = self.part.compile(ctx, span)?;
         match self.capture {
             crate::syntax::Capture::Named(name) => {
                 parser.capture = Capture::Named(name, Box::new(parser.capture));
@@ -271,26 +290,27 @@ impl Part {
 }
 
 impl Atom {
-    fn compile(self, ctx: &mut Context) -> Result<Parsing, TokenStream> {
+    fn compile(self, ctx: &mut Context, span: Span) -> Result<Parsing, TokenStream> {
         match self {
-            Atom::Terminal(lit) => Ok(Parsing::just(lit)),
-            Atom::PatTerminal(pat) => Ok(Parsing::just_pat(pat)),
+            Atom::Terminal(lit) => Ok(Parsing::just(lit, span)),
+            Atom::PatTerminal(pat) => Ok(Parsing::just_pat(pat, span)),
+            Atom::TypePterminal(ty) => Ok(Parsing::just_type(ty, span)),
             Atom::NonTerminal(name) => {
                 let depends = ctx.depends.get(&name).ok_or_else(|| {
                     quote_spanned! { name.span() => compile_error!("use of undeclared parser"); }
                 })?;
                 let depends = depends.iter().map(|(_, p)| p.clone()).collect();
-                Ok(Parsing::call(name, depends))
+                Ok(Parsing::call(name, depends, span))
             }
-            Atom::Sub(p) => p.compile(ctx),
+            Atom::Sub(p) => p.compile(ctx, span),
             Atom::Choice(first, rest) => first
-                .compile(ctx)?
-                .choice(rest.into_iter().map(|p| p.compile(ctx))),
-            Atom::Repeat(p) => Ok(p.compile(ctx)?.repeat(0)),
-            Atom::Repeat1(p) => Ok(p.compile(ctx)?.repeat(1)),
-            Atom::Optional(p) => Ok(p.compile(ctx)?.optional()),
-            Atom::LookAhead(p) => Ok(p.compile(ctx)?.look_ahead()),
-            Atom::LookAheadNot(p) => Ok(p.compile(ctx)?.look_ahead_not()),
+                .compile(ctx, span)?
+                .choice(rest.into_iter().map(|p| p.compile(ctx, span))),
+            Atom::Repeat(p) => Ok(p.compile(ctx, span)?.repeat(0)),
+            Atom::Repeat1(p) => Ok(p.compile(ctx, span)?.repeat(1)),
+            Atom::Optional(p) => Ok(p.compile(ctx, span)?.optional()),
+            Atom::LookAhead(p) => Ok(p.compile(ctx, span)?.look_ahead()),
+            Atom::LookAheadNot(p) => Ok(p.compile(ctx, span)?.look_ahead_not()),
         }
     }
 
@@ -322,7 +342,10 @@ impl Atom {
     /// Whether this atom must make progress when parsing.
     fn must_progress(&self) -> bool {
         match self {
-            Atom::Terminal(_) | Atom::PatTerminal(_) | Atom::NonTerminal(_) => true,
+            Atom::Terminal(_)
+            | Atom::PatTerminal(_)
+            | Atom::TypePterminal(_)
+            | Atom::NonTerminal(_) => true,
             Atom::Repeat(_) | Atom::Optional(_) | Atom::LookAhead(_) | Atom::LookAheadNot(_) => {
                 false
             }
@@ -337,7 +360,10 @@ impl Atom {
     /// Whether this atom may make progress when parsing.
     fn may_progress(&self) -> bool {
         match self {
-            Atom::Terminal(_) | Atom::PatTerminal(_) | Atom::NonTerminal(_) => true,
+            Atom::Terminal(_)
+            | Atom::PatTerminal(_)
+            | Atom::TypePterminal(_)
+            | Atom::NonTerminal(_) => true,
             Atom::LookAhead(_) | Atom::LookAheadNot(_) => false,
             Atom::Sub(p) => p.may_progress(),
             Atom::Choice(first, rest) => {
