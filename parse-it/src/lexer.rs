@@ -1,6 +1,6 @@
 //! Lexing for the parser.
 
-use std::hash::Hash;
+use std::{borrow::Cow, hash::Hash};
 
 use regex_automata::{Anchored, Input, PatternID};
 
@@ -15,6 +15,67 @@ pub struct Span {
     pub start: usize,
     /// The end of the span, exclusive
     pub end: usize,
+}
+
+pub trait TryConvert<T> {
+    fn try_convert(&self) -> Option<T>;
+}
+
+impl<T: Copy> TryConvert<T> for T {
+    fn try_convert(&self) -> Option<T> {
+        Some(*self)
+    }
+}
+
+pub trait AsLiteral {
+    fn as_literal<T>(&self) -> Option<T>
+    where
+        Self: TryConvert<T>,
+        T: Copy,
+    {
+        self.try_convert()
+    }
+
+    fn as_char(&self) -> Option<char> {
+        None
+    }
+
+    fn as_str<'a>(&self) -> Option<Cow<'a, str>>
+    where
+        Self: 'a,
+    {
+        None
+    }
+}
+
+macro_rules! impl_as_literal {
+    ($($type:ty),+ $(,)?) => {
+        $(
+            impl AsLiteral for $type {}
+        )+
+    };
+}
+
+impl_as_literal!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64, char, bool,
+);
+
+impl AsLiteral for &str {
+    fn as_str<'a>(&self) -> Option<Cow<'a, str>>
+    where
+        Self: 'a,
+    {
+        Some(Cow::Borrowed(self))
+    }
+}
+
+impl AsLiteral for String {
+    fn as_str<'a>(&self) -> Option<Cow<'a, str>>
+    where
+        Self: 'a,
+    {
+        Some(Cow::Owned(self.clone()))
+    }
 }
 
 /// A token produced by the lexer.
@@ -41,8 +102,8 @@ macro_rules! impl_token_from_literal {
 }
 
 impl_token_from_literal! {
-    i8, i16, i32, i64, i128,
-    u8, u16, u32, u64, u128,
+    i8, i16, i32, i64, i128, isize,
+    u8, u16, u32, u64, u128, usize,
     f32, f64,
     char, String,
     bool,
@@ -51,6 +112,18 @@ impl_token_from_literal! {
 impl<'a, T> From<&'a str> for Token<'a, T> {
     fn from(value: &'a str) -> Self {
         Token::Literal(LiteralToken::Str(value))
+    }
+}
+
+impl<'a, T> AsLiteral for Token<'a, T> {
+    fn as_str<'s>(&self) -> Option<Cow<'s, str>>
+    where
+        Self: 's,
+    {
+        match self {
+            Token::Literal(lit) => lit.as_str(),
+            _ => None,
+        }
     }
 }
 
@@ -67,6 +140,8 @@ pub enum LiteralToken<'a> {
     I64(i64),
     /// A token carrying an i128 value.
     I128(i128),
+    /// A token carrying an isize value.
+    Isize(isize),
     /// A token carrying an u8 value.
     U8(u8),
     /// A token carrying an u16 value.
@@ -77,6 +152,8 @@ pub enum LiteralToken<'a> {
     U64(u64),
     /// A token carrying an u128 value.
     U128(u128),
+    /// A token carrying an usize value.
+    Usize(usize),
     /// A token carrying a f32 value.
     F32(f32),
     /// A token carrying a f64 value.
@@ -109,11 +186,13 @@ impl_literal_token_from! {
     I32 => i32,
     I64 => i64,
     I128 => i128,
+    Isize => isize,
     U8 => u8,
     U16 => u16,
     U32 => u32,
     U64 => u64,
     U128 => u128,
+    Usize => usize,
     F32 => f32,
     F64 => f64,
     Char => char,
@@ -121,23 +200,24 @@ impl_literal_token_from! {
     Bool => bool,
 }
 
-macro_rules! impl_literal_token_integer {
-    ($($function:ident -> $type:ident),+$(,)?) => {
+macro_rules! impl_try_convert_for_literal_int {
+    ($($name:ident => $type:ty),+$(,)?) => {
         $(
-            impl<'a> LiteralToken<'a> {
-                #[doc = concat!("Try converting the token to an ", stringify!($type), " value.")]
-                pub fn $function(&self) -> Option<$type> {
+            impl TryConvert<$type> for LiteralToken<'_> {
+                fn try_convert(&self) -> Option<$type> {
                     match *self {
                         LiteralToken::I8(v) => v.try_into().ok(),
                         LiteralToken::I16(v) => v.try_into().ok(),
                         LiteralToken::I32(v) => v.try_into().ok(),
                         LiteralToken::I64(v) => v.try_into().ok(),
                         LiteralToken::I128(v) => v.try_into().ok(),
+                        LiteralToken::Isize(v) => v.try_into().ok(),
                         LiteralToken::U8(v) => v.try_into().ok(),
                         LiteralToken::U16(v) => v.try_into().ok(),
                         LiteralToken::U32(v) => v.try_into().ok(),
                         LiteralToken::U64(v) => v.try_into().ok(),
                         LiteralToken::U128(v) => v.try_into().ok(),
+                        LiteralToken::Usize(v) => v.try_into().ok(),
                         _ => None,
                     }
                 }
@@ -146,40 +226,65 @@ macro_rules! impl_literal_token_integer {
     };
 }
 
-impl_literal_token_integer! {
-    as_i8 -> i8,
-    as_i16 -> i16,
-    as_i32 -> i32,
-    as_i64 -> i64,
-    as_i128 -> i128,
-    as_u8 -> u8,
-    as_u16 -> u16,
-    as_u32 -> u32,
-    as_u64 -> u64,
-    as_u128 -> u128,
+impl_try_convert_for_literal_int! {
+    I8 => i8,
+    I16 => i16,
+    I32 => i32,
+    I64 => i64,
+    I128 => i128,
+    Isize => isize,
+    U8 => u8,
+    U16 => u16,
+    U32 => u32,
+    U64 => u64,
+    U128 => u128,
+    Usize => usize,
 }
 
-impl<'a> LiteralToken<'a> {
+impl TryConvert<bool> for LiteralToken<'_> {
+    fn try_convert(&self) -> Option<bool> {
+        match *self {
+            LiteralToken::Bool(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+impl AsLiteral for LiteralToken<'_> {
     /// Try converting the token to a `char` value.
-    pub fn as_char(&self) -> Option<char> {
+    fn as_char(&self) -> Option<char> {
         match *self {
             LiteralToken::Char(c) => Some(c),
+            LiteralToken::Str(s) => {
+                let mut chars = s.chars();
+                let ch = chars.next();
+                if chars.as_str().is_empty() {
+                    ch
+                } else {
+                    None
+                }
+            }
+            LiteralToken::String(ref s) => {
+                let mut chars = s.chars();
+                let ch = chars.next();
+                if chars.as_str().is_empty() {
+                    ch
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
 
     /// Try converting the token to a `String` value.
-    pub fn as_str(&self) -> Option<&str> {
+    fn as_str<'a>(&self) -> Option<Cow<'a, str>>
+    where
+        Self: 'a,
+    {
         match *self {
-            LiteralToken::String(ref s) => Some(s.as_str()),
-            _ => None,
-        }
-    }
-
-    /// Try converting the token to a `bool` value.
-    pub fn as_bool(&self) -> Option<bool> {
-        match *self {
-            LiteralToken::Bool(b) => Some(b),
+            LiteralToken::Str(s) => Some(Cow::Borrowed(s)),
+            LiteralToken::String(ref s) => Some(Cow::Owned(s.clone())),
             _ => None,
         }
     }

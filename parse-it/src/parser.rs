@@ -9,10 +9,10 @@
 //!
 //! [`ParseIt::parse`]: crate::ParseIt::parse
 
-use std::{cell::RefCell, fmt::Debug, rc::Rc};
+use std::{borrow::Cow, cell::RefCell, fmt::Debug, rc::Rc};
 
 use crate::{
-    lexer::{Cursor, LexerState, Span},
+    lexer::{AsLiteral, Cursor, LexerState, Span, TryConvert},
     LexIt,
 };
 
@@ -186,5 +186,29 @@ impl<'a, L: LexIt + Clone> ParserState<'a, L> {
     /// Get the current stack (for debugging purposes).
     pub fn debug(&self) -> String {
         format!("{:?}", self.stack.borrow())
+    }
+}
+
+impl<'a, L: LexIt + Clone + 'a> ParserState<'a, L> {
+    pub fn parse_literal<T>(&mut self, literal: T) -> Result<T, Error>
+    where
+        L::Token<'a>: AsLiteral + TryConvert<T>,
+        T: PartialEq + Copy,
+    {
+        self.parse_with(|tt| tt.as_literal().and_then(|l| (l == literal).then_some(l)))
+    }
+
+    pub fn parse_char(&mut self, literal: char) -> Result<char, Error>
+    where
+        L::Token<'a>: AsLiteral,
+    {
+        self.parse_with(|tt| tt.as_char().and_then(|c| (c == literal).then_some(c)))
+    }
+
+    pub fn parse_str(&mut self, literal: &'a str) -> Result<Cow<'a, str>, Error>
+    where
+        L::Token<'a>: AsLiteral,
+    {
+        self.parse_with(|tt| tt.as_str().and_then(|l| (l == literal).then_some(l)))
     }
 }

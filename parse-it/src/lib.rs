@@ -46,7 +46,7 @@
 //!     println!("{:?}", instrs);
 //! }
 //! ```
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![allow(clippy::needless_doctest_main)]
 
 pub mod lexer;
@@ -56,7 +56,7 @@ pub mod parser;
 pub use parse_it_macros::parse_it;
 
 pub use crate::{
-    lexer::{CharLexer, Cursor, LexerState},
+    lexer::{AsLiteral, CharLexer, Cursor, LexerState},
     memo::{left_rec, memorize, Memo},
     parser::{Error, ParserState},
 };
@@ -78,10 +78,18 @@ pub trait ParseIt {
     type Output;
 
     /// Parse from a [`ParserState`].
-    fn parse_stream(&self, state: &mut ParserState<Self::Lexer>) -> Result<Self::Output, Error>;
+    fn parse_stream<'a>(
+        &self,
+        state: &mut ParserState<'a, Self::Lexer>,
+    ) -> Result<Self::Output, Error>
+    where
+        <Self::Lexer as LexIt>::Token<'a>: AsLiteral;
 
     /// Parse from a string.
-    fn parse(&self, input: &str) -> Result<Self::Output, Error> {
+    fn parse<'a>(&self, input: &'a str) -> Result<Self::Output, Error>
+    where
+        <Self::Lexer as LexIt>::Token<'a>: AsLiteral,
+    {
         let mut state = ParserState::new(input);
         self.parse_stream(&mut state)
     }

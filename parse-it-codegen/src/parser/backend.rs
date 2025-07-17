@@ -186,7 +186,10 @@ impl ParserImpl {
                 type Lexer = Lexer;
                 type Output = #ret_ty;
 
-                fn parse_stream(&self, state: &mut #crate_name::ParserState<Lexer>) -> Result<#ret_ty, ::parse_it::Error> {
+                fn parse_stream<'a>(&self, state: &mut #crate_name::ParserState<'a, Lexer>) -> Result<#ret_ty, ::parse_it::Error>
+                where
+                    <Self::Lexer as #crate_name::LexIt>::Token<'a>: #crate_name::AsLiteral
+                {
                     #depends_def
                     let result = self.parse_memo(state, #depends_use);
                     result
@@ -204,7 +207,21 @@ impl Parsing {
         for (value, op) in self.into_iter() {
             let value = value.to_ident();
             let op = match op {
-                ParseOp::Just(c) => quote! { let #value = #state.parse(#c); },
+                ParseOp::Just(c) => {
+                    let result = match c {
+                        syn::Lit::Str(lit_str) => quote! { #state.parse_str(#lit_str) },
+                        syn::Lit::Char(lit_char) => quote! { #state.parse_char(#lit_char) },
+                        syn::Lit::Int(_) | syn::Lit::Float(_) | syn::Lit::Bool(_) => {
+                            quote! { #state.parse_literal(#c) }
+                        }
+                        _ => {
+                            return Err(
+                                quote_spanned! { c.span() => compile_error!("Unsupported literal type"); },
+                            )
+                        }
+                    };
+                    quote! { let #value = #result; }
+                }
                 ParseOp::Pat(p, caps) => quote! {
                     let #value = #state.parse_with(|tt| match tt {
                         #p => Some((#(#caps),*)),
