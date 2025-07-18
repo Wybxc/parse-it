@@ -50,7 +50,7 @@ fn main() {
 ## Planned features
 
 - [x] Parser generation
-- [ ] Lexer generation
+- [x] Lexer generation
 - [ ] Error reporting
 - [ ] Error recovery
 - [ ] Grammar lints
