@@ -46,7 +46,7 @@
 //!     println!("{:?}", instrs);
 //! }
 //! ```
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 #![allow(clippy::needless_doctest_main)]
 
 pub mod lexer;
@@ -61,12 +61,15 @@ pub use crate::{
     parser::{Error, ParserState},
 };
 
-/// A lexer for the parser.
+/// A lexer.
 pub trait LexIt {
+    /// The token type.
     type Token<'a>;
 
+    /// Create a new lexer instance.
     fn new() -> Self;
 
+    /// Get the next token from the lexer.
     fn next<'a>(&self, lexbuf: &mut LexerState<'a>) -> Option<Self::Token<'a>>;
 }
 

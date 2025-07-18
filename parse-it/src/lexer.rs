@@ -17,7 +17,9 @@ pub struct Span {
     pub end: usize,
 }
 
+/// A trait for types that can be converted to another type.
 pub trait TryConvert<T> {
+    /// Try to convert the value to the target type.
     fn try_convert(&self) -> Option<T>;
 }
 
@@ -27,6 +29,7 @@ impl<T: Copy> TryConvert<T> for T {
     }
 }
 
+/// Cursor position in the input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Cursor {
     cursor: usize,
@@ -42,6 +45,7 @@ pub struct LexerState<'a> {
 }
 
 impl<'a> LexerState<'a> {
+    /// Create a new lexer state.
     pub fn new(input: &'a str) -> Self {
         Self {
             start: 0,
@@ -50,7 +54,7 @@ impl<'a> LexerState<'a> {
         }
     }
 
-    /// TODO
+    /// Run the lexer against the given regex.
     pub fn run(&mut self, regex: &Regex) -> Option<PatternID> {
         let input = Input::new(self.input)
             .range(self.cursor..)
@@ -61,7 +65,7 @@ impl<'a> LexerState<'a> {
         Some(end.pattern())
     }
 
-    /// TODO
+    /// Get the lexeme of the current token.
     pub fn lexeme(&self) -> &'a str {
         &self.input[self.start..self.cursor]
     }
@@ -74,6 +78,7 @@ impl<'a> LexerState<'a> {
         }
     }
 
+    /// Get the span of the current token.
     pub fn span(&self) -> Span {
         Span {
             start: self.start,
@@ -81,10 +86,12 @@ impl<'a> LexerState<'a> {
         }
     }
 
+    /// Check if the lexer is at the end of the input.
     pub fn is_empty(&self) -> bool {
         self.cursor >= self.input.len()
     }
 
+    /// Advance the lexer to the given cursor position.
     pub fn advance_to_cursor(&mut self, cursor: Cursor) {
         self.start = cursor.start;
         self.cursor = cursor.cursor;

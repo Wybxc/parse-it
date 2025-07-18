@@ -127,6 +127,7 @@ impl<'a, L: LexIt + Clone> ParserState<'a, L> {
         self.next().and_then(matches).ok_or_else(|| self.error())
     }
 
+    /// Parse a token that can be converted to the given type.
     pub fn parse_type<T>(&mut self) -> Result<T, Error>
     where
         L::Token<'a>: TryConvert<T>,
@@ -135,6 +136,7 @@ impl<'a, L: LexIt + Clone> ParserState<'a, L> {
         self.parse_with(|tt| tt.try_convert())
     }
 
+    /// Parse a token that exactly matches the given character.
     pub fn parse_char(&mut self, c: char) -> Result<char, Error> {
         self.next().ok_or_else(|| self.error())?;
         let lexeme = self.lexbuf.lexeme();
@@ -147,6 +149,7 @@ impl<'a, L: LexIt + Clone> ParserState<'a, L> {
         }
     }
 
+    /// Parse a token that exactly matches the given string.
     pub fn parse_str(&mut self, literal: &'a str) -> Result<&str, Error> {
         self.next().ok_or_else(|| self.error())?;
         let lexeme = self.lexbuf.lexeme();
