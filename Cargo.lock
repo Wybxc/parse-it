@@ -43,7 +43,7 @@ checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 
 [[package]]
 name = "parse-it"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "parse-it-macros",
  "regex-automata",
@@ -52,7 +52,7 @@ dependencies = [
 
 [[package]]
 name = "parse-it-codegen"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hashlink",
  "proc-macro2",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "parse-it-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "parse-it-codegen",
  "proc-macro2",
