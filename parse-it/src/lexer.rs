@@ -1,12 +1,12 @@
 //! Lexing for the parser.
 
-use std::hash::Hash;
+use std::{hash::Hash, rc::Rc};
 
 use regex_automata::{Anchored, Input, PatternID};
 
 pub use regex_automata::meta::Regex;
 
-use crate::LexIt;
+use crate::{LexIt, Memo};
 
 /// A span in the source code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +42,7 @@ pub struct LexerState<'a> {
     start: usize,
     cursor: usize,
     input: &'a str,
+    memo: Rc<Memo<Cursor, (PatternID, *const Regex)>>,
 }
 
 impl<'a> LexerState<'a> {
@@ -51,18 +52,29 @@ impl<'a> LexerState<'a> {
             start: 0,
             cursor: 0,
             input,
+            memo: Default::default(),
         }
     }
 
     /// Run the lexer against the given regex.
     pub fn run(&mut self, regex: &Regex) -> Option<PatternID> {
+        let cursor = self.cursor();
+        if let Some(((pattern, re), end)) = self.memo.get(&cursor) {
+            if std::ptr::addr_eq(re, regex) {
+                self.advance_to_cursor(end);
+                return Some(pattern);
+            }
+        }
         let input = Input::new(self.input)
             .range(self.cursor..)
             .anchored(Anchored::Yes);
         let end = regex.search_half(&input)?;
         self.start = self.cursor;
         self.cursor = end.offset();
-        Some(end.pattern())
+        let pattern = end.pattern();
+        
+        self.memo.insert(cursor, ((pattern, regex), self.cursor()));
+        Some(pattern)
     }
 
     /// Get the lexeme of the current token.

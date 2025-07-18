@@ -10,6 +10,7 @@ use crate::{lexer::Cursor, Error, LexIt, ParserState};
 ///
 /// It records the results of parsing a given position in the source code, including
 /// the parsed value and the position to which the parser was advanced.
+#[derive(Clone)]
 pub struct Memo<P: Clone + Eq + Hash, T: Clone> {
     map: RefCell<FxHashMap<P, (T, P)>>,
 }
