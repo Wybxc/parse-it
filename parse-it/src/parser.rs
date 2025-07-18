@@ -9,10 +9,10 @@
 //!
 //! [`ParseIt::parse`]: crate::ParseIt::parse
 
-use std::{borrow::Cow, cell::RefCell, fmt::Debug, rc::Rc};
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 use crate::{
-    lexer::{AsLiteral, Cursor, LexerState, Span, TryConvert},
+    lexer::{Cursor, LexerState, Span, TryConvert},
     LexIt,
 };
 
@@ -124,17 +124,37 @@ impl<'a, L: LexIt + Clone> ParserState<'a, L> {
         &mut self,
         matches: impl FnOnce(L::Token<'a>) -> Option<T>,
     ) -> Result<T, Error> {
-        self.next()
-            .and_then(matches)
-            .ok_or_else(|| Error::new(self.lexbuf.span()))
+        self.next().and_then(matches).ok_or_else(|| self.error())
     }
 
-    /// Consume the next token if it matches the given token via [`PartialEq`].
-    pub fn parse<T>(&mut self, terminal: T) -> Result<L::Token<'a>, Error>
+    pub fn parse_type<T>(&mut self) -> Result<T, Error>
     where
-        L::Token<'a>: PartialEq<T>,
+        L::Token<'a>: TryConvert<T>,
+        T: PartialEq,
     {
-        self.parse_with(|tt| tt.eq(&terminal).then_some(tt))
+        self.parse_with(|tt| tt.try_convert())
+    }
+
+    pub fn parse_char(&mut self, c: char) -> Result<char, Error> {
+        self.next().ok_or_else(|| self.error())?;
+        let lexeme = self.lexbuf.lexeme();
+        let mut chars = lexeme.chars();
+        let ch = chars.next().ok_or_else(|| self.error())?;
+        if ch == c && chars.as_str().is_empty() {
+            Ok(ch)
+        } else {
+            Err(self.error())
+        }
+    }
+
+    pub fn parse_str(&mut self, literal: &'a str) -> Result<&str, Error> {
+        self.next().ok_or_else(|| self.error())?;
+        let lexeme = self.lexbuf.lexeme();
+        if lexeme == literal {
+            Ok(lexeme)
+        } else {
+            Err(self.error())
+        }
     }
 
     /// Report an error at the current position.
@@ -186,30 +206,5 @@ impl<'a, L: LexIt + Clone> ParserState<'a, L> {
     /// Get the current stack (for debugging purposes).
     pub fn debug(&self) -> String {
         format!("{:?}", self.stack.borrow())
-    }
-}
-
-impl<'a, L: LexIt + Clone + 'a> ParserState<'a, L> {
-    pub fn parse_literal<T>(&mut self, literal: T) -> Result<T, Error>
-    where
-        L::Token<'a>: TryConvert<T>,
-        T: PartialEq,
-    {
-        self.parse_with(|tt| tt.try_convert().and_then(|l| (l == literal).then_some(l)))
-    }
-
-    pub fn parse_literal_type<T>(&mut self) -> Result<T, Error>
-    where
-        L::Token<'a>: TryConvert<T>,
-        T: PartialEq,
-    {
-        self.parse_with(|tt| tt.try_convert())
-    }
-
-    pub fn parse_str(&mut self, literal: &'a str) -> Result<Cow<'a, str>, Error>
-    where
-        L::Token<'a>: AsLiteral,
-    {
-        self.parse_with(|tt| tt.as_str().and_then(|l| (l == literal).then_some(l)))
     }
 }

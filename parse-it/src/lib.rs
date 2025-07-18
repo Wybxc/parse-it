@@ -56,7 +56,7 @@ pub mod parser;
 pub use parse_it_macros::parse_it;
 
 pub use crate::{
-    lexer::{AsLiteral, CharLexer, Cursor, LexerState},
+    lexer::{CharLexer, Cursor, LexerState},
     memo::{left_rec, memorize, Memo},
     parser::{Error, ParserState},
 };
@@ -81,15 +81,10 @@ pub trait ParseIt {
     fn parse_stream<'a>(
         &self,
         state: &mut ParserState<'a, Self::Lexer>,
-    ) -> Result<Self::Output, Error>
-    where
-        <Self::Lexer as LexIt>::Token<'a>: AsLiteral;
+    ) -> Result<Self::Output, Error>;
 
     /// Parse from a string.
-    fn parse<'a>(&self, input: &'a str) -> Result<Self::Output, Error>
-    where
-        <Self::Lexer as LexIt>::Token<'a>: AsLiteral,
-    {
+    fn parse(&self, input: &str) -> Result<Self::Output, Error> {
         let mut state = ParserState::new(input);
         self.parse_stream(&mut state)
     }

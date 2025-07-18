@@ -15,28 +15,33 @@ pub enum JsonValue {
 parse_it::parse_it! {
     #[lexer]
     mod lex {
-        use parse_it::lexer::Token;
+        #[derive(Debug)]
+        pub enum Token {
+            Number(f64),
+            String(String),
+            Keyword,
+        }
 
-        pub Initial -> Token<'lex, String> {
+        pub Initial -> Token {
             r"\s+" => continue, // Skip whitespace
-            Integer => self.into(),
+            Number => Token::Number(self),
             "\"" => {
                 let mut buf = String::new();
                 while lex!(StringLit(&mut buf)).is_some() {}
-                Token::Custom(buf)
+                Token::String(buf)
             },
-            "true" => true.into(),
-            "false" => false.into(),
-            "null" => "null".into(),
-            r"\[" => '['.into(),
-            r"\]" => ']'.into(),
-            r"\{" => '{'.into(),
-            r"\}" => '}'.into(),
-            r"," => ','.into(),
-            r":" => ':'.into(),
+            "true" => Token::Keyword,
+            "false" => Token::Keyword,
+            "null" => Token::Keyword,
+            r"\[" => Token::Keyword,
+            r"\]" => Token::Keyword,
+            r"\{" => Token::Keyword,
+            r"\}" => Token::Keyword,
+            r"," => Token::Keyword,
+            r":" => Token::Keyword,
         }
 
-        Integer -> f64 {
+        Number -> f64 {
             r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?" => self.parse().unwrap(),
         }
 
@@ -57,8 +62,8 @@ parse_it::parse_it! {
     #[parser]
     mod parse {
         use std::collections::HashMap;
-        use parse_it::lexer::Token;
         use super::JsonValue;
+        use super::lex::Token;
 
         type Lexer = super::Debug;
 
@@ -79,14 +84,14 @@ parse_it::parse_it! {
         }
 
         Key -> String {
-            Token::Custom(buf) => buf.clone()
+            Token::String(buf) => buf.clone()
         }
 
         pub Value -> JsonValue {
-            i:<f64> => JsonValue::Number(i),
-            Token::Custom(buf) => JsonValue::String(buf.clone()),
-            true => JsonValue::Boolean(true),
-            false => JsonValue::Boolean(false),
+            Token::Number(i) => JsonValue::Number(i),
+            Token::String(buf) => JsonValue::String(buf.clone()),
+            "true" => JsonValue::Boolean(true),
+            "false" => JsonValue::Boolean(false),
             "null" => JsonValue::Null,
             Object => self,
             Array => self,
@@ -98,7 +103,7 @@ parse_it::parse_it! {
 pub struct Debug;
 
 impl parse_it::LexIt for Debug {
-    type Token<'a> = parse_it::lexer::Token<'a, String>;
+    type Token<'a> = lex::Token;
 
     fn new() -> Self {
         Self

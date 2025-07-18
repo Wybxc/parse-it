@@ -58,7 +58,7 @@ impl Middle {
         let attrs = self.attrs;
         let items = self.items;
         Ok(quote! {
-            #[allow(non_snake_case, unused_parens, clippy::double_parens)]
+            #[allow(non_snake_case, unused_parens, clippy::double_parens, clippy::redundant_closure)]
             #(#attrs)*
             mod #mod_name {
                 #(#items)*
@@ -186,10 +186,10 @@ impl ParserImpl {
                 type Lexer = Lexer;
                 type Output = #ret_ty;
 
-                fn parse_stream<'a>(&self, state: &mut #crate_name::ParserState<'a, Lexer>) -> Result<#ret_ty, ::parse_it::Error>
-                where
-                    <Self::Lexer as #crate_name::LexIt>::Token<'a>: #crate_name::AsLiteral
-                {
+                fn parse_stream<'a>(
+                    &self,
+                    state: &mut #crate_name::ParserState<'a, Lexer>
+                ) -> Result<#ret_ty, ::parse_it::Error> {
                     #depends_def
                     let result = self.parse_memo(state, #depends_use);
                     result
@@ -218,16 +218,12 @@ impl Parsing {
                         syn::Lit::Str(lit_str) => {
                             quote_spanned! { span => #state.parse_str(#lit_str) }
                         }
-                        syn::Lit::Char(_)
-                        | syn::Lit::Int(_)
-                        | syn::Lit::Float(_)
-                        | syn::Lit::Bool(_) => {
-                            quote_spanned! { span => #state.parse_literal(#c) }
+                        syn::Lit::Char(lit_char) => {
+                            quote_spanned! { span => #state.parse_char(#lit_char) }
                         }
                         _ => {
-                            return Err(
-                                quote_spanned! { c.span() => compile_error!("Unsupported literal type"); },
-                            )
+                            let e = "Unsupported literal";
+                            return Err(quote_spanned! { c.span() => compile_error!(#e); });
                         }
                     };
                     quote_spanned! { span => let #value = #result; }

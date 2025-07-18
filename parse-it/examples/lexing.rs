@@ -3,17 +3,23 @@ use parse_it::{LexIt, LexerState};
 parse_it::parse_it! {
     #[lexer]
     mod lex {
-        use parse_it::lexer::Token;
+        #[allow(dead_code)]
+        #[derive(Debug)]
+        pub enum Token<'a> {
+            Integer(i64),
+            String(String),
+            Ident(&'a str)
+        }
 
-        pub Initial -> Token<'lex, ()> {
+        pub Initial -> Token<'lex> {
             r"\s" => continue,
             "\"" => {
                 let mut buf = String::new();
                 while lex!(StringLiteral(&mut buf)).is_some() {}
-                buf.into()
+                Token::String(buf)
             },
-            Integer => self.into(),
-            r"[\p{XID_Start}_]\p{XID_Continue}*" => self.into(),
+            Integer => Token::Integer(self),
+            r"[\p{XID_Start}_]\p{XID_Continue}*" => Token::Ident(self),
         }
 
         Integer -> i64 {
