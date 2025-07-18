@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/Wybxc/parse-it/compare/parse-it-v0.2.0...parse-it-v0.3.0) - 2025-07-18
+
+### Added
+
+- update lexer type definitions in examples for consistency
+- change the API of tokens
+- first lexer+parser example
+- type pattern and literal in parser syntax
+- enhance parser and lexer with literal parsing capabilities
+- refactor lexer and parser interfaces for improved type handling
+- basic lexer support
+- lexer example (developing...)
+- lexer basis
+- lexer syntax
+
+### Other
+
+- update tests
+- add documentation
+
 ## [0.2.0](https://github.com/Wybxc/parse-it/compare/parse-it-v0.1.0...parse-it-v0.2.0) - 2025-07-14
 
 ### Added
