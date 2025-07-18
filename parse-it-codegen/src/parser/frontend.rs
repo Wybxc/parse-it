@@ -42,21 +42,11 @@ impl ParserMod {
             parsers.push(parser);
         }
 
-        let mut items = self.items;
-        if !items.iter().any(|item| match item {
-            syn::Item::Type(ty) => ty.ident == "Lexer",
-            _ => false,
-        }) {
-            items.push(syn::parse_quote! {
-                type Lexer = #crate_name::CharLexer;
-            });
-        }
-
         let middle = Middle {
             attrs: self.attrs,
             crate_name,
             mod_name: self.mod_name,
-            items,
+            items: self.items,
             parsers,
             debug: self.config.debug,
         };

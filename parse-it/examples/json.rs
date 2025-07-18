@@ -20,6 +20,7 @@ parse_it::parse_it! {
             Number(f64),
             String(String),
             Keyword,
+            Punct,
         }
 
         pub Initial -> Token {
@@ -33,12 +34,12 @@ parse_it::parse_it! {
             "true" => Token::Keyword,
             "false" => Token::Keyword,
             "null" => Token::Keyword,
-            r"\[" => Token::Keyword,
-            r"\]" => Token::Keyword,
-            r"\{" => Token::Keyword,
-            r"\}" => Token::Keyword,
-            r"," => Token::Keyword,
-            r":" => Token::Keyword,
+            r"\[" => Token::Punct,
+            r"\]" => Token::Punct,
+            r"\{" => Token::Punct,
+            r"\}" => Token::Punct,
+            r"," => Token::Punct,
+            r":" => Token::Punct,
         }
 
         Number -> f64 {
@@ -65,7 +66,7 @@ parse_it::parse_it! {
         use super::JsonValue;
         use super::lex::Token;
 
-        type Lexer = super::Debug;
+        type Lexer = super::lex::Initial;
 
         Object -> JsonValue {
             '{' '}' => JsonValue::Object(HashMap::new()),
@@ -84,35 +85,18 @@ parse_it::parse_it! {
         }
 
         Key -> String {
-            Token::String(buf) => buf.clone()
+            Token::String(buf) => buf
         }
 
         pub Value -> JsonValue {
             Token::Number(i) => JsonValue::Number(i),
-            Token::String(buf) => JsonValue::String(buf.clone()),
-            "true" => JsonValue::Boolean(true),
-            "false" => JsonValue::Boolean(false),
-            "null" => JsonValue::Null,
+            Token::String(buf) => JsonValue::String(buf),
+            &Token::Keyword "true" => JsonValue::Boolean(true),
+            &Token::Keyword "false" => JsonValue::Boolean(false),
+            &Token::Keyword "null" => JsonValue::Null,
             Object => self,
             Array => self,
         }
-    }
-}
-
-#[derive(Clone)]
-pub struct Debug;
-
-impl parse_it::LexIt for Debug {
-    type Token<'a> = lex::Token;
-
-    fn new() -> Self {
-        Self
-    }
-
-    fn next<'a>(&self, lexbuf: &mut parse_it::LexerState<'a>) -> Option<Self::Token<'a>> {
-        let result = lex::Initial.next(lexbuf);
-        eprintln!("Lexing: {:?} at {:?}", result, lexbuf.span());
-        result
     }
 }
 

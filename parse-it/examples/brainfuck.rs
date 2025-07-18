@@ -18,6 +18,8 @@ parse_it::parse_it! {
     mod parse {
         use super::Instr;
 
+        type Lexer = parse_it::CharLexer;
+
         pub Brainfuck -> Vec<Instr> {
             Primitive* => self,
         }
