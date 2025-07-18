@@ -7,6 +7,8 @@
 ```rust
 use parse_it::{ParseIt, parse_it};
 
+type Lexer = parse_it::CharLexer;
+
 #[derive(Debug, Clone)]
 pub enum Instr {
     Left,

@@ -46,9 +46,9 @@ impl Error {
 /// ```
 /// # use parse_it::*;
 /// fn parse_abc(state: &mut ParserState<CharLexer>) -> Result<char, Error> {
-///     state.parse('a')?;
-///     state.parse('b')?;
-///     state.parse('c')?;
+///     state.parse_char('a')?;
+///     state.parse_char('b')?;
+///     state.parse_char('c')?;
 ///     Ok('c')
 /// }
 ///
@@ -90,8 +90,8 @@ impl Error {
 /// }
 ///
 /// let mut state = ParserState::new("aaa");
-/// assert_eq!(parse_option(&mut state, |state| state.parse('a')).unwrap(), Some('a'));
-/// assert_eq!(parse_option(&mut state, |state| state.parse('b')).unwrap(), None);
+/// assert_eq!(parse_option(&mut state, |state| state.parse_char('a')).unwrap(), Some('a'));
+/// assert_eq!(parse_option(&mut state, |state| state.parse_char('b')).unwrap(), None);
 /// ```
 pub struct ParserState<'a, L> {
     lexer: L,
