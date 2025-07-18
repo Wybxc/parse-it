@@ -108,7 +108,8 @@ impl LexerImpl {
                     clippy::never_loop,
                     clippy::let_unit_value,
                     clippy::unit_arg,
-                    clippy::useless_conversion
+                    clippy::useless_conversion,
+                    clippy::diverging_sub_expression
                 )]
                 pub fn run<'lex>(
                     #lexbuf: &mut #crate_name::lexer::LexerState<'lex>,

@@ -213,11 +213,9 @@ impl Parsing {
     }
 
     pub fn choice_nocap(
-        self,
-        rest: impl Iterator<Item = Result<Parsing, TokenStream>>,
+        parsers: impl Iterator<Item = Result<Parsing, TokenStream>>,
+        span: Span,
     ) -> Result<Self, TokenStream> {
-        let span = self.span;
-        let parsers = std::iter::once(Ok(self)).chain(rest);
         let parsers = parsers.collect::<Result<Vec<_>, _>>()?;
         let op = ParseOp::Choice { parsers };
         Ok(Self::from_op(op, Capture::Loud, span))

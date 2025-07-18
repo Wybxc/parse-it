@@ -192,25 +192,18 @@ impl<'a, L: LexIt + Clone> ParserState<'a, L> {
 impl<'a, L: LexIt + Clone + 'a> ParserState<'a, L> {
     pub fn parse_literal<T>(&mut self, literal: T) -> Result<T, Error>
     where
-        L::Token<'a>: AsLiteral + TryConvert<T>,
-        T: PartialEq + Copy,
+        L::Token<'a>: TryConvert<T>,
+        T: PartialEq,
     {
-        self.parse_with(|tt| tt.as_literal().and_then(|l| (l == literal).then_some(l)))
+        self.parse_with(|tt| tt.try_convert().and_then(|l| (l == literal).then_some(l)))
     }
 
     pub fn parse_literal_type<T>(&mut self) -> Result<T, Error>
     where
-        L::Token<'a>: AsLiteral + TryConvert<T>,
-        T: PartialEq + Copy,
+        L::Token<'a>: TryConvert<T>,
+        T: PartialEq,
     {
-        self.parse_with(|tt| tt.as_literal().and_then(|l| l.try_convert()))
-    }
-
-    pub fn parse_char(&mut self, literal: char) -> Result<char, Error>
-    where
-        L::Token<'a>: AsLiteral,
-    {
-        self.parse_with(|tt| tt.as_char().and_then(|c| (c == literal).then_some(c)))
+        self.parse_with(|tt| tt.try_convert())
     }
 
     pub fn parse_str(&mut self, literal: &'a str) -> Result<Cow<'a, str>, Error>

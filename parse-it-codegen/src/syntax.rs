@@ -171,20 +171,14 @@ impl ParserMod {
 }
 
 /// ```text
-/// Parser ::= Vis Name '->' Type '{' Rule+ '}'
+/// Parser ::= Vis Name '->' Type '{' Rule* '}'
 /// ```
 #[derive(Debug)]
 pub struct Parser {
     pub vis: syn::Visibility,
     pub name: syn::Ident,
     pub ty: syn::Type,
-    pub rules: (Rule, Vec<Rule>),
-}
-
-impl Parser {
-    pub fn rules(&self) -> impl Iterator<Item = &Rule> {
-        std::iter::once(&self.rules.0).chain(self.rules.1.iter())
-    }
+    pub rules: Vec<Rule>,
 }
 
 impl syn::parse::Parse for Parser {
@@ -197,13 +191,11 @@ impl syn::parse::Parse for Parser {
         let content;
         syn::braced!(content in input);
 
-        let first_rule = content.parse::<Rule>()?;
         let mut rules = vec![];
         while !content.is_empty() {
             let rule = content.parse::<Rule>()?;
             rules.push(rule);
         }
-        let rules = (first_rule, rules);
 
         Ok(Parser {
             vis,

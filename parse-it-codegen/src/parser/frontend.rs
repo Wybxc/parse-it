@@ -135,10 +135,15 @@ impl Parser {
             .iter()
             .map(|(p, i)| (i.clone(), p.clone()))
             .collect();
-        let mut parser = self.rules.0.compile(ctx)?;
-        if !self.rules.1.is_empty() {
-            parser = parser.choice_nocap(self.rules.1.into_iter().map(|rule| rule.compile(ctx)))?;
+        if self.rules.is_empty() {
+            return Err(
+                quote_spanned! { self.name.span() => compile_error!("parser must have at least one rule"); },
+            );
         }
+        let parser = Parsing::choice_nocap(
+            self.rules.into_iter().map(|rule| rule.compile(ctx)),
+            self.name.span(),
+        )?;
 
         let memo = if ctx.left_recursion.contains(&self.name) {
             MemoKind::LeftRec
@@ -162,7 +167,7 @@ impl Parser {
             .entry(self.name.clone())
             .or_insert_with(move || {
                 let mut set = HashSet::default();
-                for rule in self.rules() {
+                for rule in &self.rules {
                     set.extend(rule.left_calls());
                 }
                 set
@@ -177,7 +182,7 @@ impl Parser {
             .entry(self.name.clone())
             .or_insert_with(move || {
                 let mut depends = OrderedMap::default();
-                for rule in self.rules() {
+                for rule in &self.rules {
                     rule.production
                         .analyze_direct_depends(&mut depends, &self.name);
                 }

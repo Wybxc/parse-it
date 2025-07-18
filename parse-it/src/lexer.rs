@@ -28,18 +28,6 @@ impl<T: Copy> TryConvert<T> for T {
 }
 
 pub trait AsLiteral {
-    fn as_literal<T>(&self) -> Option<T>
-    where
-        Self: TryConvert<T>,
-        T: Copy,
-    {
-        self.try_convert()
-    }
-
-    fn as_char(&self) -> Option<char> {
-        None
-    }
-
     fn as_str<'a>(&self) -> Option<Cow<'a, str>>
     where
         Self: 'a,
@@ -282,9 +270,8 @@ impl TryConvert<bool> for LiteralToken<'_> {
     }
 }
 
-impl AsLiteral for LiteralToken<'_> {
-    /// Try converting the token to a `char` value.
-    fn as_char(&self) -> Option<char> {
+impl TryConvert<char> for LiteralToken<'_> {
+    fn try_convert(&self) -> Option<char> {
         match *self {
             LiteralToken::Char(c) => Some(c),
             LiteralToken::Str(s) => {
@@ -308,7 +295,9 @@ impl AsLiteral for LiteralToken<'_> {
             _ => None,
         }
     }
+}
 
+impl AsLiteral for LiteralToken<'_> {
     /// Try converting the token to a `String` value.
     fn as_str<'a>(&self) -> Option<Cow<'a, str>>
     where

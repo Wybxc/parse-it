@@ -60,12 +60,21 @@ parse_it::parse_it! {
         use parse_it::lexer::Token;
         use super::JsonValue;
 
-        type Lexer = super::lex::Initial;
+        type Lexer = super::Debug;
 
         Object -> JsonValue {
-            '{' ( Key ':' Value )* '}' => {
-                let map = self.into_iter().collect::<HashMap<_, _>>();
+            '{' '}' => JsonValue::Object(HashMap::new()),
+            '{' ps:( Key ':' Value ',' )* p:( Key ':' Value ) '}' => {
+                let map = ps.into_iter().chain(std::iter::once(p)).collect::<HashMap<_, _>>();
                 JsonValue::Object(map)
+            }
+        }
+
+        Array -> JsonValue {
+            '[' ']' => JsonValue::Array(Vec::new()),
+            '[' vs:(Value ',')* v:Value ']' => {
+                let vec = vs.into_iter().chain(std::iter::once(v)).collect();
+                JsonValue::Array(vec)
             }
         }
 
@@ -76,10 +85,29 @@ parse_it::parse_it! {
         pub Value -> JsonValue {
             i:<f64> => JsonValue::Number(i),
             Token::Custom(buf) => JsonValue::String(buf.clone()),
-            "true" => JsonValue::Boolean(true),
-            "false" => JsonValue::Boolean(false),
+            true => JsonValue::Boolean(true),
+            false => JsonValue::Boolean(false),
             "null" => JsonValue::Null,
+            Object => self,
+            Array => self,
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct Debug;
+
+impl parse_it::LexIt for Debug {
+    type Token<'a> = parse_it::lexer::Token<'a, String>;
+
+    fn new() -> Self {
+        Self
+    }
+
+    fn next<'a>(&self, lexbuf: &mut parse_it::LexerState<'a>) -> Option<Self::Token<'a>> {
+        let result = lex::Initial.next(lexbuf);
+        eprintln!("Lexing: {:?} at {:?}", result, lexbuf.span());
+        result
     }
 }
 
