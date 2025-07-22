@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/Wybxc/parse-it/compare/parse-it-v0.3.0...parse-it-v0.4.0) - 2025-07-22
+
+### Other
+
+- memorization for lexer
+
 ## [0.3.0](https://github.com/Wybxc/parse-it/compare/parse-it-v0.2.0...parse-it-v0.3.0) - 2025-07-18
 
 ### Added
